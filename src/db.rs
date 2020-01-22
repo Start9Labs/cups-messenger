@@ -150,16 +150,42 @@ pub async fn get_user_info() -> Result<Vec<UserInfo>, Error> {
     let pool = POOL.clone();
     let res = tokio::task::spawn_blocking(move || {
         let conn = pool.get()?;
-        let mut stmt = conn
-            .prepare("SELECT messages.user_id, users.name, count(messages.id) FROM messages OUTER JOIN users ON messages.user_id = users.id WHERE messages.read = false GROUP BY messages.user_id, users.name")?;
-        let res = stmt.query_map(params![], |row| {
-            let uid: Vec<u8> = row.get(0)?;
-            Ok(UserInfo {
-                pubkey: PublicKey::from_bytes(&uid).map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Blob, Box::new(e)))?,
-                name: row.get(1)?,
-                unreads: row.get(2)?,
-            })
-        })?.collect::<Result<_, _>>()?;
+        let mut stmt = conn.prepare(
+            "SELECT
+                messages.user_id,
+                users.name,
+                count(messages.id)
+            FROM messages
+            LEFT JOIN users
+            ON messages.user_id = users.id
+            WHERE messages.read = false
+            GROUP BY users.id, users.name
+            UNION ALL
+            SELECT
+                users.id,
+                users.name,
+                count(messages.id)
+            LEFT JOIN messages
+            ON messages.user_id = users.id
+            WHERE messages.user_id IS NULL
+            GROUP BY users.id, users.name",
+        )?;
+        let res = stmt
+            .query_map(params![], |row| {
+                let uid: Vec<u8> = row.get(0)?;
+                Ok(UserInfo {
+                    pubkey: PublicKey::from_bytes(&uid).map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            0,
+                            rusqlite::types::Type::Blob,
+                            Box::new(e),
+                        )
+                    })?,
+                    name: row.get(1)?,
+                    unreads: row.get(2)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
         Ok::<_, Error>(res)
     })
     .await??;
