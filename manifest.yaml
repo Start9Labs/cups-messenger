@@ -1,5 +1,5 @@
 id: whisper
-version: 0.1.0
+version: "0.1.0"
 title: "Whisper"
 description:
   short: "Peer-to-Peer Encrypted Messaging"
