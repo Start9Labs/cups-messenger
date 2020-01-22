@@ -31,13 +31,13 @@ pub async fn send(msg: NewOutboundMessage) -> Result<(), Error> {
     let onion_str =
         base32::encode(base32::Alphabet::RFC4648 { padding: false }, &onion).to_lowercase();
     let res = CLIENT
-        .post(&format!("http://{}.onion", onion_str))
+        .post(&format!("http://{}.onion:59001", onion_str))
         .body(crate::wire::encode(&*crate::SECKEY, &msg)?)
         .send()
         .await?
         .status();
     if !res.is_success() {
-        eprintln!("ERROR SENDING TO http://{}.onion", onion_str);
+        eprintln!("ERROR SENDING TO http://{}.onion:59001", onion_str);
         failure::bail!("{}", res.canonical_reason().unwrap_or("UNKNOWN ERROR"))
     }
     crate::db::save_out_message(msg).await?;

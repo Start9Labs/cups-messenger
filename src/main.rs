@@ -19,7 +19,7 @@ pub struct Config {
 
 lazy_static::lazy_static! {
     pub static ref CONFIG: Config = serde_yaml::from_reader(std::fs::File::open("./start9/config.yaml").expect("./start9/config.yaml")).expect("./start9/config.yaml");
-    pub static ref PROXY: reqwest::Proxy = reqwest::Proxy::all(&format!("socks5h://{}:9050", std::env::var("HOST_IP").expect("HOST_IP"))).expect("PROXY");
+    pub static ref PROXY: reqwest::Proxy = reqwest::Proxy::http(&format!("socks5h://{}:9050", std::env::var("HOST_IP").expect("HOST_IP"))).expect("PROXY");
     pub static ref SECKEY: ed25519_dalek::ExpandedSecretKey =
         ed25519_dalek::ExpandedSecretKey::from_bytes(
             &base32::decode(
@@ -148,8 +148,9 @@ async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
     }
 }
 
-#[tokio::main]
+#[tokio::main(core_threads = 4)]
 async fn main() {
+    println!("USING PROXY: {:?}", &*PROXY);
     let mig = crate::db::migrate();
     // Construct our SocketAddr to listen on...
     let addr = SocketAddr::from(([0, 0, 0, 0], 59001));
