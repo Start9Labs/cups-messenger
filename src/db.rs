@@ -14,7 +14,7 @@ lazy_static::lazy_static! {
 
 pub async fn migrate() -> Result<(), Error> {
     let pool = POOL.clone();
-    let res = tokio::task::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let mut gconn = pool.get()?;
         let conn = gconn.transaction()?;
         let exists: i64 = conn.query_row(
