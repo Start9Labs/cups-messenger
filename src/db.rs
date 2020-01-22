@@ -1,5 +1,6 @@
 use ed25519_dalek::PublicKey;
 use failure::Error;
+use failure::ResultExt;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
@@ -17,47 +18,45 @@ pub async fn migrate() -> Result<(), Error> {
     tokio::task::spawn_blocking(move || {
         let mut gconn = pool.get()?;
         let conn = gconn.transaction()?;
-        let exists: i64 = conn.query_row(
-            "SELECT count(name) FROM sqlite_master WHERE type = 'table' AND name = 'migrations'",
-            params![],
-            |row| row.get(0),
-        )?;
+        let q =
+            "SELECT count(name) FROM sqlite_master WHERE type = 'table' AND name = 'migrations'";
+        let exists: i64 = conn
+            .query_row(q, params![], |row| row.get(0))
+            .with_context(|e| format!("{}: {}", q, e))?;
+        let q = "SELECT * FROM migrations WHERE name = 'init'";
         if exists == 0
             || conn
-                .query_row(
-                    "SELECT * FROM migrations WHERE name = 'init'",
-                    params![],
-                    |_| Ok(()),
-                )
-                .optional()?
+                .query_row(q, params![], |_| Ok(()))
+                .optional()
+                .with_context(|e| format!("{}: {}", q, e))?
                 .is_none()
         {
-            conn.execute(
-                "CREATE TABLE messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id BLOB NOT NULL,
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    inbound BOOLEAN NOT NULL,
-                    time INTEGER NOT NULL,
-                    content TEXT NOT NULL,
-                    read BOOLEAN NOT NULL DEFAULT FALSE
-                )",
-                params![],
-            )?;
-            conn.execute(
-                "CREATE TABLE users (
-                    id BLOB PRIMARY KEY,
-                    name TEXT NOT NULL,
-                )",
-                params![],
-            )?;
-            conn.execute(
-                "CREATE TABLE migrations (
-                    time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    name TEXT,
-                )",
-                params![],
-            )?;
+            let q = "CREATE TABLE messages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id BLOB NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        inbound BOOLEAN NOT NULL,
+                        time INTEGER NOT NULL,
+                        content TEXT NOT NULL,
+                        read BOOLEAN NOT NULL DEFAULT FALSE
+                    )";
+            conn.execute(q, params![])
+                .with_context(|e| format!("{}: {}", q, e))?;
+            let q = "CREATE TABLE users (
+                        id BLOB PRIMARY KEY,
+                        name TEXT NOT NULL
+                    )";
+            conn.execute(q, params![])
+                .with_context(|e| format!("{}: {}", q, e))?;
+            let q = "CREATE TABLE migrations (
+                        time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        name TEXT
+                    )";
+            conn.execute(q, params![])
+                .with_context(|e| format!("{}: {}", q, e))?;
+            let q = "INSERT INTO migrations (name) VALUES ('init')";
+            conn.execute(q, params![])
+                .with_context(|e| format!("{}: {}", q, e))?;
         }
         Ok::<_, Error>(())
     })
