@@ -151,7 +151,7 @@ pub async fn get_user_info() -> Result<Vec<UserInfo>, Error> {
     let res = tokio::task::spawn_blocking(move || {
         let conn = pool.get()?;
         let mut stmt = conn
-            .prepare("SELECT messages.user_id, users.name, count(messages.id) FROM messages LEFT JOIN users ON messages.user_id = user.id GROUP BY messages.user_id, users.name")?;
+            .prepare("SELECT messages.user_id, users.name, count(messages.id) FROM messages LEFT JOIN users ON messages.user_id = users.id GROUP BY messages.user_id, users.name")?;
         let res = stmt.query_map(params![], |row| {
             let uid: Vec<u8> = row.get(0)?;
             Ok(UserInfo {
