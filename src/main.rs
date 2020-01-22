@@ -18,12 +18,12 @@ pub struct Config {
 }
 
 lazy_static::lazy_static! {
-    pub static ref CONFIG: Config = serde_yaml::from_reader(std::fs::File::open("config.yaml").expect("config.yaml")).expect("config.yaml");
-    pub static ref PROXY: reqwest::Proxy = reqwest::Proxy::all(&format!("http://{}:9050", std::env::var("HOST_IP").expect("HOST_IP"))).expect("PROXY");
+    pub static ref CONFIG: Config = serde_yaml::from_reader(std::fs::File::open("./start9/config.yaml").expect("./start9/config.yaml")).expect("./start9/config.yaml");
+    pub static ref PROXY: reqwest::Proxy = reqwest::Proxy::http(&format!("socks5h://{}:9050", std::env::var("HOST_IP").expect("HOST_IP"))).expect("PROXY");
     pub static ref SECKEY: ed25519_dalek::ExpandedSecretKey =
         ed25519_dalek::ExpandedSecretKey::from_bytes(
             &base32::decode(
-                base32::Alphabet::RFC4648 { padding: true },
+                base32::Alphabet::RFC4648 { padding: false },
                 &std::env::var("TOR_KEY").expect("TOR_KEY"),
             ).expect("TOR_KEY"),
         ).expect("TOR_KEY");
@@ -42,47 +42,70 @@ async fn get_bytes(body: &mut Body) -> Result<Vec<u8>, Error> {
     Ok(res)
 }
 
-async fn handle(mut req: Request<Body>) -> Result<Response<Body>, Error> {
+async fn handle(req: Request<Body>) -> Result<Response<Body>, Error> {
+    let res = handler(req).await;
+    match &res {
+        Ok(_) => {
+            eprintln!("OK");
+            res
+        }
+        Err(e) => {
+            eprintln!("ERROR: {}", e);
+            Response::builder()
+                .status(500)
+                .body(format!("{}", e).into())
+                .map_err(From::from)
+        }
+    }
+}
+
+async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
     match req.method() {
         &Method::POST => match req.headers().get("Authorization") {
-            Some(auth)
+            Some(auth) => {
                 if auth
                     == &format!(
                         "Basic {}",
                         base64::encode(&format!("me:{}", &*CONFIG.password))
-                    ) =>
-            {
-                let req_data = get_bytes(req.body_mut()).await?;
-                if req_data.len() < 33 {
+                    )
+                {
+                    let req_data = get_bytes(req.body_mut()).await?;
+                    if req_data.len() < 33 {
+                        Response::builder()
+                            .status(400)
+                            .body(Body::empty())
+                            .map_err(From::from)
+                    } else {
+                        match req_data[0] {
+                            0 => crate::message::send(crate::message::NewOutboundMessage {
+                                to: PublicKey::from_bytes(&req_data[1..33])?,
+                                time: std::time::UNIX_EPOCH
+                                    .elapsed()
+                                    .map(|a| a.as_secs() as i64)
+                                    .unwrap_or_else(|a| a.duration().as_secs() as i64 * -1),
+                                content: String::from_utf8(req_data[33..].to_vec())?,
+                            })
+                            .await
+                            .map(|_| Body::empty())
+                            .map(Response::new),
+                            1 => crate::db::save_user(
+                                PublicKey::from_bytes(&req_data[1..33])?,
+                                String::from_utf8(req_data[33..].to_vec())?,
+                            )
+                            .await
+                            .map(|_| Body::empty())
+                            .map(Response::new),
+                            _ => Response::builder()
+                                .status(400)
+                                .body(Body::empty())
+                                .map_err(From::from),
+                        }
+                    }
+                } else {
                     Response::builder()
                         .status(400)
                         .body(Body::empty())
                         .map_err(From::from)
-                } else {
-                    match req_data[0] {
-                        0 => crate::message::send(crate::message::NewOutboundMessage {
-                            to: PublicKey::from_bytes(&req_data[1..33])?,
-                            time: std::time::UNIX_EPOCH
-                                .elapsed()
-                                .map(|a| a.as_secs() as i64)
-                                .unwrap_or_else(|a| a.duration().as_secs() as i64 * -1),
-                            content: String::from_utf8(req_data[33..].to_vec())?,
-                        })
-                        .await
-                        .map(|_| Body::empty())
-                        .map(Response::new),
-                        1 => crate::db::save_user(
-                            PublicKey::from_bytes(&req_data[1..33])?,
-                            String::from_utf8(req_data[33..].to_vec())?,
-                        )
-                        .await
-                        .map(|_| Body::empty())
-                        .map(Response::new),
-                        _ => Response::builder()
-                            .status(400)
-                            .body(Body::empty())
-                            .map_err(From::from),
-                    }
                 }
             }
             _ => crate::message::receive(&get_bytes(req.body_mut()).await?)
@@ -91,7 +114,13 @@ async fn handle(mut req: Request<Body>) -> Result<Response<Body>, Error> {
                 .map(Response::new),
         },
         &Method::GET => match (req.headers().get("Authorization"), req.uri().query()) {
-            (Some(auth), Some(query)) if auth == &format!("Basic {}", &*CONFIG.password) => {
+            (Some(auth), Some(query))
+                if auth
+                    == &format!(
+                        "Basic {}",
+                        base64::encode(&format!("me:{}", &*CONFIG.password))
+                    ) =>
+            {
                 match serde_urlencoded::from_str(query) {
                     Ok(q) => crate::query::handle(q)
                         .await
@@ -119,8 +148,9 @@ async fn handle(mut req: Request<Body>) -> Result<Response<Body>, Error> {
     }
 }
 
-#[tokio::main]
+#[tokio::main(core_threads = 4)]
 async fn main() {
+    println!("USING PROXY: {:?}", &*PROXY);
     let mig = crate::db::migrate();
     // Construct our SocketAddr to listen on...
     let addr = SocketAddr::from(([0, 0, 0, 0], 59001));

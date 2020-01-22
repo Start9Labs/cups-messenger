@@ -1,5 +1,6 @@
 use ed25519_dalek::PublicKey;
 use failure::Error;
+use failure::ResultExt;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
@@ -17,47 +18,46 @@ pub async fn migrate() -> Result<(), Error> {
     tokio::task::spawn_blocking(move || {
         let mut gconn = pool.get()?;
         let conn = gconn.transaction()?;
-        let exists: i64 = conn.query_row(
-            "SELECT count(name) FROM sqlite_master WHERE type = 'table' AND name = 'migrations'",
-            params![],
-            |row| row.get(0),
-        )?;
+        let q =
+            "SELECT count(name) FROM sqlite_master WHERE type = 'table' AND name = 'migrations'";
+        let exists: i64 = conn
+            .query_row(q, params![], |row| row.get(0))
+            .with_context(|e| format!("{}: {}", q, e))?;
+        let q = "SELECT * FROM migrations WHERE name = 'init'";
         if exists == 0
             || conn
-                .query_row(
-                    "SELECT * FROM migrations WHERE name = 'init'",
-                    params![],
-                    |_| Ok(()),
-                )
-                .optional()?
+                .query_row(q, params![], |_| Ok(()))
+                .optional()
+                .with_context(|e| format!("{}: {}", q, e))?
                 .is_none()
         {
-            conn.execute(
-                "CREATE TABLE messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id BLOB NOT NULL,
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    inbound BOOLEAN NOT NULL,
-                    time INTEGER NOT NULL,
-                    content TEXT NOT NULL,
-                    read BOOLEAN NOT NULL DEFAULT FALSE
-                )",
-                params![],
-            )?;
-            conn.execute(
-                "CREATE TABLE users (
-                    id BLOB PRIMARY KEY,
-                    name TEXT NOT NULL,
-                )",
-                params![],
-            )?;
-            conn.execute(
-                "CREATE TABLE migrations (
-                    time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    name TEXT,
-                )",
-                params![],
-            )?;
+            let q = "CREATE TABLE messages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id BLOB NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        inbound BOOLEAN NOT NULL,
+                        time INTEGER NOT NULL,
+                        content TEXT NOT NULL,
+                        read BOOLEAN NOT NULL DEFAULT FALSE
+                    )";
+            conn.execute(q, params![])
+                .with_context(|e| format!("{}: {}", q, e))?;
+            let q = "CREATE TABLE users (
+                        id BLOB PRIMARY KEY,
+                        name TEXT NOT NULL
+                    )";
+            conn.execute(q, params![])
+                .with_context(|e| format!("{}: {}", q, e))?;
+            let q = "CREATE TABLE migrations (
+                        time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        name TEXT
+                    )";
+            conn.execute(q, params![])
+                .with_context(|e| format!("{}: {}", q, e))?;
+            let q = "INSERT INTO migrations (name) VALUES ('init')";
+            conn.execute(q, params![])
+                .with_context(|e| format!("{}: {}", q, e))?;
+            conn.commit()?;
         }
         Ok::<_, Error>(())
     })
@@ -99,7 +99,7 @@ pub async fn save_out_message(message: NewOutboundMessage) -> Result<(), Error> 
     tokio::task::spawn_blocking(move || {
         let conn = pool.get()?;
         conn.execute(
-            "INSERT INTO messages (user_id, inbound, time, content) VALUES (?1, false, ?2, ?3)",
+            "INSERT INTO messages (user_id, inbound, time, content, read) VALUES (?1, false, ?2, ?3, true)",
             params![&message.to.as_bytes()[..], message.time, message.content],
         )?;
         Ok::<_, Error>(())
@@ -150,16 +150,42 @@ pub async fn get_user_info() -> Result<Vec<UserInfo>, Error> {
     let pool = POOL.clone();
     let res = tokio::task::spawn_blocking(move || {
         let conn = pool.get()?;
-        let mut stmt = conn
-            .prepare("SELECT messages.user_id, users.name, count(messages.id) FROM messages LEFT JOIN users ON messages.user_id = user.id GROUP BY messages.user_id, users.name")?;
-        let res = stmt.query_map(params![], |row| {
-            let uid: Vec<u8> = row.get(0)?;
-            Ok(UserInfo {
-                pubkey: PublicKey::from_bytes(&uid).map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Blob, Box::new(e)))?,
-                name: row.get(1)?,
-                unreads: row.get(2)?,
-            })
-        })?.collect::<Result<_, _>>()?;
+        let mut stmt = conn.prepare(
+            "SELECT
+                messages.user_id,
+                users.name,
+                SUM(CASE WHEN messages.read THEN 0 ELSE 1 END)
+            FROM messages
+            LEFT JOIN users
+            ON messages.user_id = users.id
+            GROUP BY users.id, users.name
+            UNION ALL
+            SELECT
+                users.id,
+                users.name,
+                count(messages.id)
+            FROM users
+            LEFT JOIN messages
+            ON messages.user_id = users.id
+            WHERE messages.user_id IS NULL
+            GROUP BY users.id, users.name",
+        )?;
+        let res = stmt
+            .query_map(params![], |row| {
+                let uid: Vec<u8> = row.get(0)?;
+                Ok(UserInfo {
+                    pubkey: PublicKey::from_bytes(&uid).map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            0,
+                            rusqlite::types::Type::Blob,
+                            Box::new(e),
+                        )
+                    })?,
+                    name: row.get(1)?,
+                    unreads: row.get(2)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
         Ok::<_, Error>(res)
     })
     .await??;
@@ -203,6 +229,8 @@ pub async fn get_messages(
                 })
             })?
             .collect::<Result<_, _>>()?;
+        drop(stmt);
+        conn.commit()?;
         Ok::<_, Error>(res)
     })
     .await??;

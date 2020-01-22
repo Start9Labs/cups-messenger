@@ -51,7 +51,8 @@ pub fn encode(key: &ExpandedSecretKey, message: &NewOutboundMessage) -> Result<V
     res.extend_from_slice(&[0; 64]);
     res.extend_from_slice(&i64::to_be_bytes(message.time));
     res.extend_from_slice(&message.content.as_bytes());
-    res[33..97].clone_from_slice(&key.sign(&message.content.as_bytes(), &pubkey).to_bytes());
+    let sig = key.sign(&res[97..], &pubkey);
+    res[33..97].clone_from_slice(&sig.to_bytes());
 
     Ok(res)
 }

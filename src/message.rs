@@ -28,14 +28,18 @@ pub async fn send(msg: NewOutboundMessage) -> Result<(), Error> {
     onion.extend_from_slice(msg.to.as_bytes());
     onion.extend_from_slice(&hasher.result()[..2]);
     onion.push(3);
-    CLIENT
-        .post(&format!(
-            "http://{}.onion",
-            base32::encode(base32::Alphabet::RFC4648 { padding: true }, &onion)
-        ))
+    let onion_str =
+        base32::encode(base32::Alphabet::RFC4648 { padding: false }, &onion).to_lowercase();
+    let res = CLIENT
+        .post(&format!("http://{}.onion:59001", onion_str))
         .body(crate::wire::encode(&*crate::SECKEY, &msg)?)
         .send()
-        .await?;
+        .await?
+        .status();
+    if !res.is_success() {
+        eprintln!("ERROR SENDING TO http://{}.onion:59001", onion_str);
+        failure::bail!("{}", res.canonical_reason().unwrap_or("UNKNOWN ERROR"))
+    }
     crate::db::save_out_message(msg).await?;
     Ok(())
 }

@@ -1,6 +1,6 @@
-id: whisper
+id: cups
 version: "0.1.0"
-title: "Whisper"
+title: "Cups"
 description:
   short: "Peer-to-Peer Encrypted Messaging"
   long: "A peer-to-peer encrypted messaging platform that operates over tor."
