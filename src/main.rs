@@ -121,6 +121,7 @@ async fn handle(mut req: Request<Body>) -> Result<Response<Body>, Error> {
 
 #[tokio::main]
 async fn main() {
+    let mig = crate::db::migrate();
     // Construct our SocketAddr to listen on...
     let addr = SocketAddr::from(([0, 0, 0, 0], 59001));
 
@@ -130,6 +131,7 @@ async fn main() {
     // Then bind and serve...
     let server = Server::bind(&addr).serve(make_service);
 
+    mig.await.expect("migration");
     // And run forever...
     if let Err(e) = server.await {
         eprintln!("server error: {}", e);
