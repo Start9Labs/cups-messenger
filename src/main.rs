@@ -42,7 +42,16 @@ async fn get_bytes(body: &mut Body) -> Result<Vec<u8>, Error> {
     Ok(res)
 }
 
-async fn handle(mut req: Request<Body>) -> Result<Response<Body>, Error> {
+async fn handle(req: Request<Body>) -> Result<Response<Body>, Error> {
+    let res = handler(req).await;
+    match &res {
+        Ok(_) => eprintln!("OK"),
+        Err(e) => eprintln!("ERROR: {}", e),
+    };
+    res
+}
+
+async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
     match req.method() {
         &Method::POST => match req.headers().get("Authorization") {
             Some(auth)
