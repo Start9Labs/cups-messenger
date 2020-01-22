@@ -114,7 +114,13 @@ async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
                 .map(Response::new),
         },
         &Method::GET => match (req.headers().get("Authorization"), req.uri().query()) {
-            (Some(auth), Some(query)) if auth == &format!("Basic {}", &*CONFIG.password) => {
+            (Some(auth), Some(query))
+                if auth
+                    == &format!(
+                        "Basic {}",
+                        base64::encode(&format!("me:{}", &*CONFIG.password))
+                    ) =>
+            {
                 match serde_urlencoded::from_str(query) {
                     Ok(q) => crate::query::handle(q)
                         .await
