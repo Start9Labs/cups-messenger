@@ -45,53 +45,67 @@ async fn get_bytes(body: &mut Body) -> Result<Vec<u8>, Error> {
 async fn handle(req: Request<Body>) -> Result<Response<Body>, Error> {
     let res = handler(req).await;
     match &res {
-        Ok(_) => eprintln!("OK"),
-        Err(e) => eprintln!("ERROR: {}", e),
-    };
-    res
+        Ok(_) => {
+            eprintln!("OK");
+            res
+        }
+        Err(e) => {
+            eprintln!("ERROR: {}", e);
+            Response::builder()
+                .status(500)
+                .body(format!("{}", e).into())
+                .map_err(From::from)
+        }
+    }
 }
 
 async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
     match req.method() {
         &Method::POST => match req.headers().get("Authorization") {
-            Some(auth)
+            Some(auth) => {
                 if auth
                     == &format!(
                         "Basic {}",
                         base64::encode(&format!("me:{}", &*CONFIG.password))
-                    ) =>
-            {
-                let req_data = get_bytes(req.body_mut()).await?;
-                if req_data.len() < 33 {
+                    )
+                {
+                    let req_data = get_bytes(req.body_mut()).await?;
+                    if req_data.len() < 33 {
+                        Response::builder()
+                            .status(400)
+                            .body(Body::empty())
+                            .map_err(From::from)
+                    } else {
+                        match req_data[0] {
+                            0 => crate::message::send(crate::message::NewOutboundMessage {
+                                to: PublicKey::from_bytes(&req_data[1..33])?,
+                                time: std::time::UNIX_EPOCH
+                                    .elapsed()
+                                    .map(|a| a.as_secs() as i64)
+                                    .unwrap_or_else(|a| a.duration().as_secs() as i64 * -1),
+                                content: String::from_utf8(req_data[33..].to_vec())?,
+                            })
+                            .await
+                            .map(|_| Body::empty())
+                            .map(Response::new),
+                            1 => crate::db::save_user(
+                                PublicKey::from_bytes(&req_data[1..33])?,
+                                String::from_utf8(req_data[33..].to_vec())?,
+                            )
+                            .await
+                            .map(|_| Body::empty())
+                            .map(Response::new),
+                            _ => Response::builder()
+                                .status(400)
+                                .body(Body::empty())
+                                .map_err(From::from),
+                        }
+                    }
+                } else {
                     Response::builder()
                         .status(400)
                         .body(Body::empty())
                         .map_err(From::from)
-                } else {
-                    match req_data[0] {
-                        0 => crate::message::send(crate::message::NewOutboundMessage {
-                            to: PublicKey::from_bytes(&req_data[1..33])?,
-                            time: std::time::UNIX_EPOCH
-                                .elapsed()
-                                .map(|a| a.as_secs() as i64)
-                                .unwrap_or_else(|a| a.duration().as_secs() as i64 * -1),
-                            content: String::from_utf8(req_data[33..].to_vec())?,
-                        })
-                        .await
-                        .map(|_| Body::empty())
-                        .map(Response::new),
-                        1 => crate::db::save_user(
-                            PublicKey::from_bytes(&req_data[1..33])?,
-                            String::from_utf8(req_data[33..].to_vec())?,
-                        )
-                        .await
-                        .map(|_| Body::empty())
-                        .map(Response::new),
-                        _ => Response::builder()
-                            .status(400)
-                            .body(Body::empty())
-                            .map_err(From::from),
-                    }
                 }
             }
             _ => crate::message::receive(&get_bytes(req.body_mut()).await?)
