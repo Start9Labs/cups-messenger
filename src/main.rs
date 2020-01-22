@@ -18,7 +18,7 @@ pub struct Config {
 }
 
 lazy_static::lazy_static! {
-    pub static ref CONFIG: Config = serde_yaml::from_reader(std::fs::File::open("config.yaml").expect("config.yaml")).expect("config.yaml");
+    pub static ref CONFIG: Config = serde_yaml::from_reader(std::fs::File::open("./start9/config.yaml").expect("./start9/config.yaml")).expect("./start9/config.yaml");
     pub static ref PROXY: reqwest::Proxy = reqwest::Proxy::all(&format!("http://{}:9050", std::env::var("HOST_IP").expect("HOST_IP"))).expect("PROXY");
     pub static ref SECKEY: ed25519_dalek::ExpandedSecretKey =
         ed25519_dalek::ExpandedSecretKey::from_bytes(
