@@ -31,7 +31,7 @@ pub async fn send(msg: NewOutboundMessage) -> Result<(), Error> {
     CLIENT
         .post(&format!(
             "http://{}.onion",
-            base32::encode(base32::Alphabet::RFC4648 { padding: true }, &onion)
+            base32::encode(base32::Alphabet::RFC4648 { padding: false }, &onion).to_lowercase()
         ))
         .body(crate::wire::encode(&*crate::SECKEY, &msg)?)
         .send()

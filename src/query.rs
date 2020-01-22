@@ -18,7 +18,7 @@ pub async fn handle(q: Query) -> Result<Vec<u8>, Error> {
         Query::Messages { pubkey, limit } => {
             get_messages(
                 PublicKey::from_bytes(
-                    &base32::decode(base32::Alphabet::RFC4648 { padding: true }, &pubkey)
+                    &base32::decode(base32::Alphabet::RFC4648 { padding: false }, &pubkey)
                         .ok_or_else(|| failure::format_err!("invalid pubkey"))?,
                 )?,
                 limit,

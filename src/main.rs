@@ -23,7 +23,7 @@ lazy_static::lazy_static! {
     pub static ref SECKEY: ed25519_dalek::ExpandedSecretKey =
         ed25519_dalek::ExpandedSecretKey::from_bytes(
             &base32::decode(
-                base32::Alphabet::RFC4648 { padding: true },
+                base32::Alphabet::RFC4648 { padding: false },
                 &std::env::var("TOR_KEY").expect("TOR_KEY"),
             ).expect("TOR_KEY"),
         ).expect("TOR_KEY");
