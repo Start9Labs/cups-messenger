@@ -99,7 +99,7 @@ pub async fn save_out_message(message: NewOutboundMessage) -> Result<(), Error> 
     tokio::task::spawn_blocking(move || {
         let conn = pool.get()?;
         conn.execute(
-            "INSERT INTO messages (user_id, inbound, time, content) VALUES (?1, false, ?2, ?3)",
+            "INSERT INTO messages (user_id, inbound, time, content, read) VALUES (?1, false, ?2, ?3, true)",
             params![&message.to.as_bytes()[..], message.time, message.content],
         )?;
         Ok::<_, Error>(())
@@ -151,7 +151,7 @@ pub async fn get_user_info() -> Result<Vec<UserInfo>, Error> {
     let res = tokio::task::spawn_blocking(move || {
         let conn = pool.get()?;
         let mut stmt = conn
-            .prepare("SELECT messages.user_id, users.name, count(messages.id) FROM messages LEFT JOIN users ON messages.user_id = users.id GROUP BY messages.user_id, users.name")?;
+            .prepare("SELECT messages.user_id, users.name, count(messages.id) FROM messages OUTER JOIN users ON messages.user_id = users.id WHERE messages.read = false GROUP BY messages.user_id, users.name")?;
         let res = stmt.query_map(params![], |row| {
             let uid: Vec<u8> = row.get(0)?;
             Ok(UserInfo {
