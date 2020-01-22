@@ -154,17 +154,17 @@ pub async fn get_user_info() -> Result<Vec<UserInfo>, Error> {
             "SELECT
                 messages.user_id,
                 users.name,
-                count(messages.id)
+                SUM(CASE WHEN messages.read THEN 0 ELSE 1 END)
             FROM messages
             LEFT JOIN users
             ON messages.user_id = users.id
-            WHERE messages.read = false
             GROUP BY users.id, users.name
             UNION ALL
             SELECT
                 users.id,
                 users.name,
                 count(messages.id)
+            FROM users
             LEFT JOIN messages
             ON messages.user_id = users.id
             WHERE messages.user_id IS NULL
