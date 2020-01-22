@@ -1,0 +1,11 @@
+---
+password:
+  type: string
+  nullable: false
+  name: "Password"
+  description: "The password for connecting to the server."
+  default:
+    charset: "a-k,m-z,2-9"
+    len: 20
+  pattern: '^[^\n"]*$'
+  patternDescription: "Must not contain newline or quote characters."
