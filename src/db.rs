@@ -57,6 +57,7 @@ pub async fn migrate() -> Result<(), Error> {
             let q = "INSERT INTO migrations (name) VALUES ('init')";
             conn.execute(q, params![])
                 .with_context(|e| format!("{}: {}", q, e))?;
+            conn.commit()?;
         }
         Ok::<_, Error>(())
     })
@@ -202,6 +203,8 @@ pub async fn get_messages(
                 })
             })?
             .collect::<Result<_, _>>()?;
+        drop(stmt);
+        conn.commit()?;
         Ok::<_, Error>(res)
     })
     .await??;
