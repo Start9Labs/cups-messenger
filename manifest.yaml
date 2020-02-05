@@ -1,3 +1,4 @@
+compat: v0
 id: cups
 version: "0.1.0"
 title: "Cups"
@@ -10,7 +11,8 @@ release-notes: |
   - Recieve messages
   - Contact book
 ports:
-  - 59001
+  - internal: 59001
+    tor: 59001
 image:
   type: tar
 mount: /root
