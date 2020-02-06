@@ -113,7 +113,7 @@ pub async fn save_user(pubkey: PublicKey, name: String) -> Result<(), Error> {
     tokio::task::spawn_blocking(move || {
         let conn = pool.get()?;
         conn.execute(
-            "INSERT INTO users (id, name) VALUES (?1, ?2)",
+            "INSERT INTO users (id, name) VALUES (?1, ?2) ON CONFLICT(id) DO UPDATE SET name = excluded.name",
             params![&pubkey.as_bytes()[..], name],
         )?;
         Ok::<_, Error>(())
@@ -134,6 +134,20 @@ pub async fn get_user(pubkey: PublicKey) -> Result<Option<String>, Error> {
             )
             .optional()?;
         Ok::<_, Error>(res)
+    })
+    .await??;
+    Ok(res)
+}
+
+pub async fn del_user(pubkey: PublicKey) -> Result<(), Error> {
+    let pool = POOL.clone();
+    let res = tokio::task::spawn_blocking(move || {
+        let conn = pool.get()?;
+        let res = conn.execute(
+            "DELETE FROM users WHERE id = ?1",
+            params![&pubkey.as_bytes()[..]],
+        )?;
+        Ok::<_, Error>(())
     })
     .await??;
     Ok(res)

@@ -8,6 +8,7 @@ pub enum Query {
     Users,
     Messages {
         pubkey: String,
+        #[serde(deserialize_with = "crate::util::deser_parse_opt")]
         limit: Option<usize>,
     },
 }

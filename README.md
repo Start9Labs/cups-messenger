@@ -40,3 +40,13 @@ Cups uses Basic Auth
 #### Response
 
 `<Message>*` in reverse chronological order where `<Message>` = `<0x00 for Inbound / 0x01 for Outbound> <Unix Epoch (i64 BE)> <Length of Message (u64 BE)> <UTF-8 Encoded Message>`
+
+### Get Version
+
+#### Request
+
+Unauthenticated `GET` with no query
+
+#### Response
+
+`<Major Version (u64 BE)> <Minor Version (u64 BE)> <Patch Version (u64 BE)>` 
