@@ -143,7 +143,7 @@ pub async fn del_user(pubkey: PublicKey) -> Result<(), Error> {
     let pool = POOL.clone();
     let res = tokio::task::spawn_blocking(move || {
         let conn = pool.get()?;
-        let res = conn.execute(
+        conn.execute(
             "DELETE FROM users WHERE id = ?1",
             params![&pubkey.as_bytes()[..]],
         )?;

@@ -1,6 +1,6 @@
 compat: v0
 id: cups
-version: "0.1.0"
+version: "0.1.1"
 title: "Cups"
 description:
   short: "Peer-to-Peer Encrypted Messaging"
@@ -13,8 +13,15 @@ release-notes: |
 ports:
   - internal: 59001
     tor: 59001
+  - internal: 80
+    tor: 80
 image:
   type: tar
 mount: /root
-assets: []
+assets:
+  - src: httpd.conf
+    dst: "."
+    overwrite: true
+  - src: www
+    dst: "."
 hidden-service-version: v3
