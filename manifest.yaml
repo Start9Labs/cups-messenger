@@ -24,4 +24,5 @@ assets:
     overwrite: true
   - src: www
     dst: "."
+    overwrite: true
 hidden-service-version: v3
