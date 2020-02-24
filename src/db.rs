@@ -7,6 +7,7 @@ use rusqlite::OptionalExtension;
 use uuid::Uuid;
 
 use crate::message::{NewInboundMessage, NewOutboundMessage};
+use crate::query::BeforeAfter;
 use crate::query::Limits;
 
 pub type DbPool = Pool<SqliteConnectionManager>;
@@ -175,16 +176,19 @@ pub async fn get_messages(
         if mark_as_read {
             conn.execute(
                 &format!("UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1{}{} ORDER BY created_at DESC LIMIT {})",
-                if let Some(before) = &limits.before { format!(" AND id < {}", before)} else { "".to_owned() },
-                if let Some(after) = &limits.after { format!(" AND id > {}", after) } else { "".to_owned() },
+                if let Some(BeforeAfter::Before(before)) = &limits.before_after { format!(" AND id < {}", before)} else { "".to_owned() },
+                if let Some(BeforeAfter::After(after)) = &limits.before_after { format!(" AND id > {}", after) } else { "".to_owned() },
                 limits.limit.unwrap_or(1024)),
                 params![&pubkey.as_bytes()[..]]
             )?;
         }
         let mut stmt = conn.prepare(
-            &format!("SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1{}{} ORDER BY created_at DESC LIMIT {}",
-            if let Some(before) = &limits.before { format!(" AND id < {}", before)} else { "".to_owned() },
-            if let Some(after) = &limits.after { format!(" AND id > {}", after) } else { "".to_owned() },
+            &format!("SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 {} LIMIT {}",
+            match &limits.before_after {
+                Some(BeforeAfter::Before(before)) => format!("AND id < {} ORDER BY created_at DESC", before),
+                Some(BeforeAfter::After(after)) => format!("AND id > {} ORDER BY created_at ASC", after),
+                None => format!("ORDER BY created_at DESC"),
+            },
             limits.limit.unwrap_or(1024)),
         )?;
         let res = stmt

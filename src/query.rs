@@ -18,10 +18,15 @@ pub enum Query {
 pub struct Limits {
     #[serde(deserialize_with = "crate::util::deser_parse_opt")]
     pub limit: Option<usize>,
-    #[serde(deserialize_with = "crate::util::deser_parse_opt")]
-    pub before: Option<i64>,
-    #[serde(deserialize_with = "crate::util::deser_parse_opt")]
-    pub after: Option<i64>,
+    #[serde(flatten)]
+    pub before_after: Option<BeforeAfter>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BeforeAfter {
+    Before(#[serde(deserialize_with = "crate::util::deser_parse")] i64),
+    After(#[serde(deserialize_with = "crate::util::deser_parse")] i64),
 }
 
 pub async fn handle(q: Query) -> Result<Vec<u8>, Error> {
