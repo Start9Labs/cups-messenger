@@ -1,5 +1,6 @@
 use ed25519_dalek::PublicKey;
 use failure::Error;
+use uuid::Uuid;
 
 pub struct NewInboundMessage {
     pub from: PublicKey,
@@ -8,6 +9,7 @@ pub struct NewInboundMessage {
 }
 
 pub struct NewOutboundMessage {
+    pub tracking_id: Option<Uuid>,
     pub to: PublicKey,
     pub time: i64,
     pub content: String,

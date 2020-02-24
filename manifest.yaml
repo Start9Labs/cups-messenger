@@ -1,15 +1,13 @@
 compat: v0
 id: cups
-version: "0.1.1"
+version: "0.2.0"
 title: "Cups"
 description:
   short: "Peer-to-Peer Encrypted Messaging"
   long: "A peer-to-peer encrypted messaging platform that operates over tor."
 release-notes: |
-  # Alpha Release
-  - Send messages
-  - Recieve messages
-  - Contact book
+  # Cups UI released
+  - Breaks compatibility with cups-cli 0.1.x
 ports:
   - internal: 59001
     tor: 59001

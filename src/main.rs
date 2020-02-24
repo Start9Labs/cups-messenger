@@ -6,10 +6,12 @@ use failure::Error;
 use futures::StreamExt;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server};
+use uuid::Uuid;
 
 mod db;
 mod delete;
 mod message;
+mod migrations;
 mod query;
 mod util;
 mod wire;
@@ -23,8 +25,8 @@ mod wire;
 // };
 pub const VERSION: [u8; 24] = [
     0, 0, 0, 0, 0, 0, 0, 0, // 0_u64
-    0, 0, 0, 0, 0, 0, 0, 1, // 1_u64
-    0, 0, 0, 0, 0, 0, 0, 1, // 1_u64
+    0, 0, 0, 0, 0, 0, 0, 2, // 1_u64
+    0, 0, 0, 0, 0, 0, 0, 0, // 1_u64
 ];
 
 #[derive(serde::Deserialize)]
@@ -93,7 +95,9 @@ async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
                     } else {
                         match req_data[0] {
                             0 => crate::message::send(crate::message::NewOutboundMessage {
-                                to: PublicKey::from_bytes(&req_data[1..33])?,
+                                tracking_id: Some(Uuid::from_slice(&req_data[1..17])?)
+                                    .filter(Uuid::is_nil),
+                                to: PublicKey::from_bytes(&req_data[17..49])?,
                                 time: std::time::UNIX_EPOCH
                                     .elapsed()
                                     .map(|a| a.as_secs() as i64)
@@ -191,7 +195,7 @@ async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
 #[tokio::main(core_threads = 4)]
 async fn main() {
     println!("USING PROXY: {:?}", &*PROXY);
-    let mig = crate::db::migrate();
+    let mig = crate::migrations::migrate();
     // Construct our SocketAddr to listen on...
     let addr = SocketAddr::from(([0, 0, 0, 0], 59001));
 

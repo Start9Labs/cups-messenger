@@ -13,7 +13,7 @@ Cups uses Basic Auth
 
 #### Request
 
-`POST` with body `0x00 <ED25519 PubKey of Recipient (32 bytes)> <UTF-8 Encoded Message>`
+`POST` with body `0x00 <Tracking ID (UUID BE)> <ED25519 PubKey of Recipient (32 bytes)> <UTF-8 Encoded Message>`
 
 ### Name User
 
@@ -39,7 +39,7 @@ Cups uses Basic Auth
 
 #### Response
 
-`<Message>*` in reverse chronological order where `<Message>` = `<0x00 for Inbound / 0x01 for Outbound> <Unix Epoch (i64 BE)> <Length of Message (u64 BE)> <UTF-8 Encoded Message>`
+`<Message>*` in reverse chronological order where `<Message>` = `<0x00 for Inbound / 0x01 for Outbound> <ID (i64 BE)> <Tracking ID (UUID BE)> <Unix Epoch (i64 BE)> <Length of Message (u64 BE)> <UTF-8 Encoded Message>`
 
 ### Get Version
 

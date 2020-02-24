@@ -1,68 +1,17 @@
 use ed25519_dalek::PublicKey;
 use failure::Error;
-use failure::ResultExt;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
 use rusqlite::OptionalExtension;
+use uuid::Uuid;
 
 use crate::message::{NewInboundMessage, NewOutboundMessage};
+use crate::query::Limits;
 
 pub type DbPool = Pool<SqliteConnectionManager>;
 lazy_static::lazy_static! {
-    static ref POOL: DbPool = Pool::new(SqliteConnectionManager::file("messages.db")).expect("POOL");
-}
-
-pub async fn migrate() -> Result<(), Error> {
-    let pool = POOL.clone();
-    tokio::task::spawn_blocking(move || {
-        let mut gconn = pool.get()?;
-        let conn = gconn.transaction()?;
-        let q =
-            "SELECT count(name) FROM sqlite_master WHERE type = 'table' AND name = 'migrations'";
-        let exists: i64 = conn
-            .query_row(q, params![], |row| row.get(0))
-            .with_context(|e| format!("{}: {}", q, e))?;
-        let q = "SELECT * FROM migrations WHERE name = 'init'";
-        if exists == 0
-            || conn
-                .query_row(q, params![], |_| Ok(()))
-                .optional()
-                .with_context(|e| format!("{}: {}", q, e))?
-                .is_none()
-        {
-            let q = "CREATE TABLE messages (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id BLOB NOT NULL,
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        inbound BOOLEAN NOT NULL,
-                        time INTEGER NOT NULL,
-                        content TEXT NOT NULL,
-                        read BOOLEAN NOT NULL DEFAULT FALSE
-                    )";
-            conn.execute(q, params![])
-                .with_context(|e| format!("{}: {}", q, e))?;
-            let q = "CREATE TABLE users (
-                        id BLOB PRIMARY KEY,
-                        name TEXT NOT NULL
-                    )";
-            conn.execute(q, params![])
-                .with_context(|e| format!("{}: {}", q, e))?;
-            let q = "CREATE TABLE migrations (
-                        time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        name TEXT
-                    )";
-            conn.execute(q, params![])
-                .with_context(|e| format!("{}: {}", q, e))?;
-            let q = "INSERT INTO migrations (name) VALUES ('init')";
-            conn.execute(q, params![])
-                .with_context(|e| format!("{}: {}", q, e))?;
-            conn.commit()?;
-        }
-        Ok::<_, Error>(())
-    })
-    .await??;
-    Ok(())
+    pub static ref POOL: DbPool = Pool::new(SqliteConnectionManager::file("messages.db")).expect("POOL");
 }
 
 pub async fn get_message_count_by_user(pubkey: PublicKey) -> Result<i64, Error> {
@@ -99,8 +48,8 @@ pub async fn save_out_message(message: NewOutboundMessage) -> Result<(), Error> 
     tokio::task::spawn_blocking(move || {
         let conn = pool.get()?;
         conn.execute(
-            "INSERT INTO messages (user_id, inbound, time, content, read) VALUES (?1, false, ?2, ?3, true)",
-            params![&message.to.as_bytes()[..], message.time, message.content],
+            "INSERT INTO messages (tracking_id, user_id, inbound, time, content, read) VALUES (?1, ?2, false, ?3, ?4, true)",
+            params![message.tracking_id, &message.to.as_bytes()[..], message.time, message.content],
         )?;
         Ok::<_, Error>(())
     })
@@ -208,13 +157,15 @@ pub async fn get_user_info() -> Result<Vec<UserInfo>, Error> {
 
 #[derive(Clone, Debug)]
 pub struct Message {
+    pub id: i64,
+    pub tracking_id: Option<Uuid>,
     pub time: i64,
     pub inbound: bool,
     pub content: String,
 }
 pub async fn get_messages(
     pubkey: PublicKey,
-    limit: Option<usize>,
+    limits: Limits,
     mark_as_read: bool,
 ) -> Result<Vec<Message>, Error> {
     let pool = POOL.clone();
@@ -222,24 +173,28 @@ pub async fn get_messages(
         let mut gconn = pool.get()?;
         let conn = gconn.transaction()?;
         if mark_as_read {
-            if let Some(limit) = limit {
-                conn.execute(&format!("UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 ORDER BY created_at DESC LIMIT {})", limit), params![&pubkey.as_bytes()[..]])?;
-            } else {
-                conn.execute(&format!("UPDATE messages SET read = true WHERE user_id = ?1"), params![&pubkey.as_bytes()[..]])?;
-            }
+            conn.execute(
+                &format!("UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1{}{} ORDER BY created_at DESC LIMIT {})",
+                if let Some(before) = &limits.before { format!(" AND id < {}", before)} else { "".to_owned() },
+                if let Some(after) = &limits.after { format!(" AND id > {}", after) } else { "".to_owned() },
+                limits.limit.unwrap_or(1024)),
+                params![&pubkey.as_bytes()[..]]
+            )?;
         }
-        let mut stmt =
-            if let Some(limit) = limit {
-                conn.prepare(&format!("SELECT time, inbound, content FROM messages WHERE user_id = ?1 ORDER BY created_at DESC LIMIT {}", limit))?
-            } else {
-                conn.prepare("SELECT time, inbound, content FROM messages WHERE user_id = ?1 ORDER BY created_at DESC")?
-            };
+        let mut stmt = conn.prepare(
+            &format!("SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1{}{} ORDER BY created_at DESC LIMIT {}",
+            if let Some(before) = &limits.before { format!(" AND id < {}", before)} else { "".to_owned() },
+            if let Some(after) = &limits.after { format!(" AND id > {}", after) } else { "".to_owned() },
+            limits.limit.unwrap_or(1024)),
+        )?;
         let res = stmt
             .query_map(params![&pubkey.as_bytes()[..]], |row| {
                 Ok(Message {
-                    time: row.get(0)?,
-                    inbound: row.get(1)?,
-                    content: row.get(2)?,
+                    id: row.get(0)?,
+                    tracking_id: row.get(1)?,
+                    time: row.get(2)?,
+                    inbound: row.get(3)?,
+                    content: row.get(4)?,
                 })
             })?
             .collect::<Result<_, _>>()?;
