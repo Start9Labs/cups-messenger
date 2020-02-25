@@ -15,21 +15,6 @@ lazy_static::lazy_static! {
     pub static ref POOL: DbPool = Pool::new(SqliteConnectionManager::file("messages.db")).expect("POOL");
 }
 
-pub async fn get_message_count_by_user(pubkey: PublicKey) -> Result<i64, Error> {
-    let pool = POOL.clone();
-    let res = tokio::task::spawn_blocking(move || {
-        let conn = pool.get()?;
-        let res = conn.query_row(
-            "SELECT count(id) FROM messages WHERE user_id = ?1",
-            params![&pubkey.as_bytes()[..]],
-            |row| row.get(0),
-        )?;
-        Ok::<_, Error>(res)
-    })
-    .await??;
-    Ok(res)
-}
-
 pub async fn save_in_message(message: NewInboundMessage) -> Result<(), Error> {
     let pool = POOL.clone();
     tokio::task::spawn_blocking(move || {
@@ -70,23 +55,6 @@ pub async fn save_user(pubkey: PublicKey, name: String) -> Result<(), Error> {
     })
     .await??;
     Ok(())
-}
-
-pub async fn get_user(pubkey: PublicKey) -> Result<Option<String>, Error> {
-    let pool = POOL.clone();
-    let res = tokio::task::spawn_blocking(move || {
-        let conn = pool.get()?;
-        let res = conn
-            .query_row(
-                "SELECT name FROM users WHERE id = ?1",
-                params![&pubkey.as_bytes()[..]],
-                |row| row.get(0),
-            )
-            .optional()?;
-        Ok::<_, Error>(res)
-    })
-    .await??;
-    Ok(res)
 }
 
 pub async fn del_user(pubkey: PublicKey) -> Result<(), Error> {
@@ -164,6 +132,7 @@ pub struct Message {
     pub inbound: bool,
     pub content: String,
 }
+
 pub async fn get_messages(
     pubkey: PublicKey,
     limits: Limits,
@@ -175,24 +144,84 @@ pub async fn get_messages(
         let conn = gconn.transaction()?;
         if mark_as_read {
             conn.execute(
-                &format!("UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1{}{} ORDER BY created_at DESC LIMIT {})",
-                if let Some(BeforeAfter::Before(before)) = &limits.before_after { format!(" AND id < {}", before)} else { "".to_owned() },
-                if let Some(BeforeAfter::After(after)) = &limits.before_after { format!(" AND id > {}", after) } else { "".to_owned() },
-                limits.limit.unwrap_or(1024)),
+                &format!(
+                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 {}{})",
+                    match &limits.before_after {
+                        Some(BeforeAfter::Before(before)) => format!("AND id < {} ORDER BY id DESC", before),
+                        Some(BeforeAfter::After(after)) => format!("AND id > {} ORDER BY id ASC", after),
+                        None => format!("ORDER BY id DESC"),
+                    },
+                    if let Some(limit) = limits.limit { format!(" LIMIT {}", limit) } else { "".to_owned() }
+                ),
                 params![&pubkey.as_bytes()[..]]
             )?;
         }
         let mut stmt = conn.prepare(
-            &format!("SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 {} LIMIT {}",
-            match &limits.before_after {
-                Some(BeforeAfter::Before(before)) => format!("AND id < {} ORDER BY created_at DESC", before),
-                Some(BeforeAfter::After(after)) => format!("AND id > {} ORDER BY created_at ASC", after),
-                None => format!("ORDER BY created_at DESC"),
-            },
-            limits.limit.unwrap_or(1024)),
+            &format!(
+                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 {}{}",
+                match &limits.before_after {
+                    Some(BeforeAfter::Before(before)) => format!("AND id < {} ORDER BY id DESC", before),
+                    Some(BeforeAfter::After(after)) => format!("AND id > {} ORDER BY id ASC", after),
+                    None => format!("ORDER BY id DESC"),
+                },
+                if let Some(limit) = limits.limit { format!(" LIMIT {}", limit) } else { "".to_owned() }
+            ),
         )?;
         let res = stmt
             .query_map(params![&pubkey.as_bytes()[..]], |row| {
+                Ok(Message {
+                    id: row.get(0)?,
+                    tracking_id: row.get(1)?,
+                    time: row.get(2)?,
+                    inbound: row.get(3)?,
+                    content: row.get(4)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        drop(stmt);
+        conn.commit()?;
+        Ok::<_, Error>(res)
+    })
+    .await??;
+    Ok(res)
+}
+
+pub async fn get_new_messages(
+    pubkey: PublicKey,
+    limit: Option<usize>,
+    mark_as_read: bool,
+) -> Result<Vec<Message>, Error> {
+    let pool = POOL.clone();
+    let res = tokio::task::spawn_blocking(move || {
+        let mut gconn = pool.get()?;
+        let conn = gconn.transaction()?;
+        let id: Option<i64> = conn.query_row(
+            "SELECT id FROM messages WHERE user_id = ?1 AND read = false ORDER BY id ASC LIMIT 1",
+            params![&pubkey.as_bytes()[..]],
+            |row| row.get(0),
+        ).optional()?;
+        let id = if let Some(id) = id {
+            id
+        } else {
+            return Ok(Vec::new());
+        };
+        if mark_as_read {
+            conn.execute(
+                &format!(
+                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 AND id >= ?2 ORDER BY id ASC{})",
+                    if let Some(limit) = limit { format!(" LIMIT {}", limit) } else { "".to_owned() }
+                ),
+                params![&pubkey.as_bytes()[..]]
+            )?;
+        }
+        let mut stmt = conn.prepare(
+            &format!(
+                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 AND id >= ?2 ORDER BY id ASC{}",
+                if let Some(limit) = limit { format!(" LIMIT {}", limit) } else { "".to_owned() }
+            ),
+        )?;
+        let res = stmt
+            .query_map(params![&pubkey.as_bytes()[..], id], |row| {
                 Ok(Message {
                     id: row.get(0)?,
                     tracking_id: row.get(1)?,
