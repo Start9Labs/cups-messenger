@@ -12,7 +12,7 @@ use crate::query::Limits;
 
 pub type DbPool = Pool<SqliteConnectionManager>;
 lazy_static::lazy_static! {
-    pub static ref POOL: DbPool = Pool::new(SqliteConnectionManager::file("messages.db")).expect("POOL");
+    pub static ref POOL: DbPool = Pool::builder().max_size(8).build(SqliteConnectionManager::file("messages.db")).expect("POOL");
 }
 
 pub async fn save_in_message(message: NewInboundMessage) -> Result<(), Error> {
@@ -141,7 +141,7 @@ pub async fn get_messages(
     let pool = POOL.clone();
     let res = tokio::task::spawn_blocking(move || {
         let mut gconn = pool.get()?;
-        let conn = gconn.transaction()?;
+        let conn = gconn.transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)?;
         if mark_as_read {
             conn.execute(
                 &format!(
@@ -194,7 +194,7 @@ pub async fn get_new_messages(
     let pool = POOL.clone();
     let res = tokio::task::spawn_blocking(move || {
         let mut gconn = pool.get()?;
-        let conn = gconn.transaction()?;
+        let conn = gconn.transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)?;
         let id: Option<i64> = conn.query_row(
             "SELECT id FROM messages WHERE user_id = ?1 AND read = false ORDER BY id ASC LIMIT 1",
             params![&pubkey.as_bytes()[..]],

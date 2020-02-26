@@ -7,7 +7,7 @@ pub async fn migrate() -> Result<(), Error> {
     let pool = crate::db::POOL.clone();
     tokio::task::spawn_blocking(move || {
         let mut gconn = pool.get()?;
-        let conn = gconn.transaction()?;
+        let conn = gconn.transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)?;
         init(&conn)?;
         tracking_ids(&conn)?;
         conn.commit()?;
@@ -30,6 +30,7 @@ pub fn init(conn: &rusqlite::Transaction) -> Result<(), Error> {
             .with_context(|e| format!("{}: {}", q, e))?
             .is_none()
     {
+        println!("EXECUTING init MIGRATION");
         let q = "CREATE TABLE messages (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         user_id BLOB NOT NULL,
@@ -68,6 +69,7 @@ pub fn tracking_ids(conn: &rusqlite::Transaction) -> Result<(), Error> {
         .with_context(|e| format!("{}: {}", q, e))?
         .is_none()
     {
+        println!("EXECUTING tracking_ids MIGRATION");
         let q = "ALTER TABLE messages ADD tracking_id BLOB";
         conn.execute(q, params![])
             .with_context(|e| format!("{}: {}", q, e))?;
@@ -75,6 +77,9 @@ pub fn tracking_ids(conn: &rusqlite::Transaction) -> Result<(), Error> {
         conn.execute(q, params![])
             .with_context(|e| format!("{}: {}", q, e))?;
         let q = "CREATE INDEX messages_tracking_id_idx ON messages(tracking_id)";
+        conn.execute(q, params![])
+            .with_context(|e| format!("{}: {}", q, e))?;
+        let q = "INSERT INTO migrations (name) VALUES ('tracking_ids')";
         conn.execute(q, params![])
             .with_context(|e| format!("{}: {}", q, e))?;
     }
