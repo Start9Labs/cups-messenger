@@ -1,18 +1,27 @@
 use ed25519_dalek::PublicKey;
 use failure::Error;
-use parking_lot::Mutex;
 use rusqlite::params;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension;
 use uuid::Uuid;
 use failure::ResultExt;
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::OpenFlags;
 
 use crate::message::{NewInboundMessage, NewOutboundMessage};
 use crate::query::BeforeAfter;
 use crate::query::Limits;
 
 lazy_static::lazy_static! {
-    pub static ref CONN: Mutex<Connection> = Mutex::new(Connection::open("messages.db").expect("sqlite connection"));
+    pub static ref POOL: Pool<SqliteConnectionManager> = {
+        let mut flags = OpenFlags::empty();
+        flags.insert(OpenFlags::SQLITE_OPEN_READ_WRITE);
+        flags.insert(OpenFlags::SQLITE_OPEN_CREATE);
+        flags.insert(OpenFlags::SQLITE_OPEN_FULL_MUTEX);
+        flags.insert(OpenFlags::SQLITE_OPEN_SHARED_CACHE);
+        Pool::new(SqliteConnectionManager::file("messages.db").with_flags(flags)).expect("sqlite connection")
+    };
 }
 
 pub fn cached_exec<P>(conn: &Connection, q: &str, params: P) -> Result<(), Error>
@@ -49,7 +58,7 @@ where
 
 pub async fn save_in_message(message: NewInboundMessage) -> Result<(), Error> {
     tokio::task::spawn_blocking(move || {
-        let conn = CONN.lock();
+        let conn = POOL.get()?;
         cached_exec(
             &*conn, 
             "INSERT INTO messages (user_id, inbound, time, content) VALUES (?1, true, ?2, ?3)",
@@ -67,7 +76,7 @@ pub async fn save_in_message(message: NewInboundMessage) -> Result<(), Error> {
 
 pub async fn save_out_message(message: NewOutboundMessage) -> Result<(), Error> {
     tokio::task::spawn_blocking(move || {
-        let conn = CONN.lock();
+        let conn = POOL.get()?;
         cached_exec(
             &*conn, 
             "INSERT INTO messages (tracking_id, user_id, inbound, time, content, read) VALUES (?1, ?2, false, ?3, ?4, true)",
@@ -81,7 +90,7 @@ pub async fn save_out_message(message: NewOutboundMessage) -> Result<(), Error> 
 
 pub async fn save_user(pubkey: PublicKey, name: String) -> Result<(), Error> {
     tokio::task::spawn_blocking(move || {
-        let conn = CONN.lock();
+        let conn = POOL.get()?;
         cached_exec(
             &*conn,
             "INSERT INTO users (id, name) VALUES (?1, ?2) ON CONFLICT(id) DO UPDATE SET name = excluded.name",
@@ -95,7 +104,7 @@ pub async fn save_user(pubkey: PublicKey, name: String) -> Result<(), Error> {
 
 pub async fn del_user(pubkey: PublicKey) -> Result<(), Error> {
     let res = tokio::task::spawn_blocking(move || {
-        let conn = CONN.lock();
+        let conn = POOL.get()?;
         cached_exec(
             &*conn,
             "DELETE FROM users WHERE id = ?1",
@@ -116,7 +125,7 @@ pub struct UserInfo {
 
 pub async fn get_user_info() -> Result<Vec<UserInfo>, Error> {
     let res = tokio::task::spawn_blocking(move || {
-        let conn = CONN.lock();
+        let conn = POOL.get()?;
         let mut stmt = conn.prepare_cached(
             "SELECT
                 messages.user_id,
@@ -174,7 +183,7 @@ pub async fn get_messages(
     mark_as_read: bool,
 ) -> Result<Vec<Message>, Error> {
     let res = tokio::task::spawn_blocking(move || {
-        let mut gconn = CONN.lock();
+        let mut gconn = POOL.get()?;
         let conn = gconn.transaction()?;
         if mark_as_read {
             match (&limits.before_after, &limits.limit) {
@@ -270,7 +279,7 @@ pub async fn get_new_messages(
     mark_as_read: bool,
 ) -> Result<Vec<Message>, Error> {
     let res = tokio::task::spawn_blocking(move || {
-        let mut gconn = CONN.lock();
+        let mut gconn = POOL.get()?;
         let conn = gconn.transaction()?;
         let id: Option<i64> = cached_query_row(
             &*conn, 

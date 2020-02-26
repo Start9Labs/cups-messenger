@@ -5,7 +5,7 @@ use rusqlite::OptionalExtension;
 
 pub async fn migrate() -> Result<(), Error> {
     tokio::task::spawn_blocking(move || {
-        let mut gconn = crate::db::CONN.lock();
+        let mut gconn = crate::db::POOL.get()?;
         let conn = gconn.transaction()?;
         init(&conn)?;
         tracking_ids(&conn)?;
