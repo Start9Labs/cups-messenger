@@ -90,7 +90,7 @@ pub async fn get_user_info() -> Result<Vec<UserInfo>, Error> {
             FROM messages
             LEFT JOIN users
             ON messages.user_id = users.id
-            GROUP BY users.id, users.name
+            GROUP BY messages.user_id, users.name
             UNION ALL
             SELECT
                 users.id,
