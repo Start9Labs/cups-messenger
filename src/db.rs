@@ -19,8 +19,8 @@ lazy_static::lazy_static! {
         flags.insert(OpenFlags::SQLITE_OPEN_READ_WRITE);
         flags.insert(OpenFlags::SQLITE_OPEN_CREATE);
         flags.insert(OpenFlags::SQLITE_OPEN_FULL_MUTEX);
-        flags.insert(OpenFlags::SQLITE_OPEN_SHARED_CACHE);
-        Pool::new(SqliteConnectionManager::file("messages.db").with_flags(flags)).expect("sqlite connection")
+        flags.insert(OpenFlags::SQLITE_OPEN_PRIVATE_CACHE);
+        Pool::new(SqliteConnectionManager::file("messages.db").with_flags(flags).with_init(|c| c.execute_batch("PRAGMA busy_timeout = 10000;"))).expect("sqlite connection")
     };
 }
 
@@ -231,37 +231,37 @@ pub async fn get_messages(
         let res = match (&limits.before_after, &limits.limit) {
             (Some(BeforeAfter::Before(before)), None) => cached_query_map(
                 &*conn, 
-                "SELECT id FROM messages WHERE user_id = ?1 AND id < ?2 ORDER BY id DESC",
+                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 AND id < ?2 ORDER BY id DESC",
                 params![&pubkey.as_bytes()[..], before],
                 mapper,
             )?,
             (Some(BeforeAfter::Before(before)), Some(limit)) => cached_query_map(
                 &*conn, 
-                "SELECT id FROM messages WHERE user_id = ?1 AND id < ?2 ORDER BY id DESC LIMIT ?3",
+                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 AND id < ?2 ORDER BY id DESC LIMIT ?3",
                 params![&pubkey.as_bytes()[..], before, *limit as i64],
                 mapper,
             )?,
             (Some(BeforeAfter::After(after)), None) => cached_query_map(
                 &*conn,
-                "SELECT id FROM messages WHERE user_id = ?1 AND id > ?2 ORDER BY id ASC",
+                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 AND id > ?2 ORDER BY id ASC",
                 params![&pubkey.as_bytes()[..], after],
                 mapper,
             )?,
             (Some(BeforeAfter::After(after)), Some(limit)) => cached_query_map(
                 &*conn,
-                "SELECT id FROM messages WHERE user_id = ?1 AND id > ?2 ORDER BY id ASC LIMIT ?3",
+                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 AND id > ?2 ORDER BY id ASC LIMIT ?3",
                 params![&pubkey.as_bytes()[..], after, *limit as i64],
                 mapper,
             )?,
             (None, None) => cached_query_map(
                 &*conn,
-                "SELECT id FROM messages WHERE user_id = ?1 ORDER BY id DESC",
+                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 ORDER BY id DESC",
                 params![&pubkey.as_bytes()[..]],
                 mapper,
             )?,
             (None, Some(limit)) => cached_query_map(
                 &*conn,
-                "SELECT id FROM messages WHERE user_id = ?1 ORDER BY id DESC LIMIT ?2",
+                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 ORDER BY id DESC LIMIT ?2",
                 params![&pubkey.as_bytes()[..], *limit as i64],
                 mapper,
             )?,
