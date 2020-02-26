@@ -5,6 +5,7 @@ use rusqlite::params;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension;
 use uuid::Uuid;
+use failure::ResultExt;
 
 use crate::message::{NewInboundMessage, NewOutboundMessage};
 use crate::query::BeforeAfter;
@@ -14,12 +15,49 @@ lazy_static::lazy_static! {
     pub static ref CONN: Mutex<Connection> = Mutex::new(Connection::open("messages.db").expect("sqlite connection"));
 }
 
+pub fn cached_exec<P>(conn: &Connection, q: &str, params: P) -> Result<(), Error>
+where
+    P: IntoIterator,
+    P::Item: rusqlite::ToSql,
+{
+    let mut stmt = conn.prepare_cached(q).with_context(|e| format!("{}: {}", q, e))?;
+    stmt.execute(params).with_context(|e| format!("{}: {}", q, e))?;
+    Ok(())
+}
+
+pub fn cached_query_row<P, F, T>(conn: & Connection, q: &str, params: P, f: F) -> Result<Option<T>, Error>
+where
+    P: IntoIterator,
+    P::Item: rusqlite::ToSql,
+    F: FnMut(&rusqlite::Row) -> Result<T, rusqlite::Error>
+{
+    let mut stmt = conn.prepare_cached(q).with_context(|e| format!("{}: {}", q, e))?;
+    let res = stmt.query_row(params, f).optional().with_context(|e| format!("{}: {}", q, e))?;
+    Ok(res)
+}
+
+pub fn cached_query_map<P, F, T>(conn: &Connection, q: &str, params: P, f: F) -> Result<Vec<T>, Error>
+where
+    P: IntoIterator,
+    P::Item: rusqlite::ToSql,
+    F: FnMut(&rusqlite::Row) -> Result<T, rusqlite::Error>
+{
+    let mut stmt = conn.prepare_cached(q).with_context(|e| format!("{}: {}", q, e))?;
+    let res = stmt.query_map(params, f).with_context(|e| format!("{}: {}", q, e))?;
+    res.map(|r| r.with_context(|e| format!("{}: {}", q, e)).map_err(From::from)).collect()
+}
+
 pub async fn save_in_message(message: NewInboundMessage) -> Result<(), Error> {
     tokio::task::spawn_blocking(move || {
         let conn = CONN.lock();
-        conn.execute(
+        cached_exec(
+            &*conn, 
             "INSERT INTO messages (user_id, inbound, time, content) VALUES (?1, true, ?2, ?3)",
-            params![&message.from.as_bytes()[..], message.time, message.content],
+            params![
+                &message.from.as_bytes()[..],
+                message.time,
+                message.content
+            ],
         )?;
         Ok::<_, Error>(())
     })
@@ -30,7 +68,8 @@ pub async fn save_in_message(message: NewInboundMessage) -> Result<(), Error> {
 pub async fn save_out_message(message: NewOutboundMessage) -> Result<(), Error> {
     tokio::task::spawn_blocking(move || {
         let conn = CONN.lock();
-        conn.execute(
+        cached_exec(
+            &*conn, 
             "INSERT INTO messages (tracking_id, user_id, inbound, time, content, read) VALUES (?1, ?2, false, ?3, ?4, true)",
             params![message.tracking_id, &message.to.as_bytes()[..], message.time, message.content],
         )?;
@@ -43,7 +82,8 @@ pub async fn save_out_message(message: NewOutboundMessage) -> Result<(), Error> 
 pub async fn save_user(pubkey: PublicKey, name: String) -> Result<(), Error> {
     tokio::task::spawn_blocking(move || {
         let conn = CONN.lock();
-        conn.execute(
+        cached_exec(
+            &*conn,
             "INSERT INTO users (id, name) VALUES (?1, ?2) ON CONFLICT(id) DO UPDATE SET name = excluded.name",
             params![&pubkey.as_bytes()[..], name],
         )?;
@@ -56,7 +96,8 @@ pub async fn save_user(pubkey: PublicKey, name: String) -> Result<(), Error> {
 pub async fn del_user(pubkey: PublicKey) -> Result<(), Error> {
     let res = tokio::task::spawn_blocking(move || {
         let conn = CONN.lock();
-        conn.execute(
+        cached_exec(
+            &*conn,
             "DELETE FROM users WHERE id = ?1",
             params![&pubkey.as_bytes()[..]],
         )?;
@@ -136,42 +177,86 @@ pub async fn get_messages(
         let mut gconn = CONN.lock();
         let conn = gconn.transaction()?;
         if mark_as_read {
-            conn.execute(
-                &format!(
-                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 {}{})",
-                    match &limits.before_after {
-                        Some(BeforeAfter::Before(before)) => format!("AND id < {} ORDER BY id DESC", before),
-                        Some(BeforeAfter::After(after)) => format!("AND id > {} ORDER BY id ASC", after),
-                        None => format!("ORDER BY id DESC"),
-                    },
-                    if let Some(limit) = limits.limit { format!(" LIMIT {}", limit) } else { "".to_owned() }
-                ),
-                params![&pubkey.as_bytes()[..]]
-            )?;
+            match (&limits.before_after, &limits.limit) {
+                (Some(BeforeAfter::Before(before)), None) => cached_exec(
+                    &*conn, 
+                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 AND id < ?2 ORDER BY id DESC)",
+                    params![&pubkey.as_bytes()[..], before],
+                )?,
+                (Some(BeforeAfter::Before(before)), Some(limit)) => cached_exec(
+                    &*conn, 
+                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 AND id < ?2 ORDER BY id DESC LIMIT ?3)",
+                    params![&pubkey.as_bytes()[..], before, *limit as i64],
+                )?,
+                (Some(BeforeAfter::After(after)), None) => cached_exec(
+                    &*conn,
+                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 AND id > ?2 ORDER BY id ASC)",
+                    params![&pubkey.as_bytes()[..], after],
+                )?,
+                (Some(BeforeAfter::After(after)), Some(limit)) => cached_exec(
+                    &*conn,
+                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 AND id > ?2 ORDER BY id ASC LIMIT ?3)",
+                    params![&pubkey.as_bytes()[..], after, *limit as i64],
+                )?,
+                (None, None) => cached_exec(
+                    &*conn,
+                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 ORDER BY id DESC)",
+                    params![&pubkey.as_bytes()[..]],
+                )?,
+                (None, Some(limit)) => cached_exec(
+                    &*conn,
+                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 ORDER BY id DESC LIMIT ?2)",
+                    params![&pubkey.as_bytes()[..], *limit as i64],
+                )?,
+            };
         }
-        let mut stmt = conn.prepare_cached(
-            &format!(
-                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 {}{}",
-                match &limits.before_after {
-                    Some(BeforeAfter::Before(before)) => format!("AND id < {} ORDER BY id DESC", before),
-                    Some(BeforeAfter::After(after)) => format!("AND id > {} ORDER BY id ASC", after),
-                    None => format!("ORDER BY id DESC"),
-                },
-                if let Some(limit) = limits.limit { format!(" LIMIT {}", limit) } else { "".to_owned() }
-            ),
-        )?;
-        let res = stmt
-            .query_map(params![&pubkey.as_bytes()[..]], |row| {
-                Ok(Message {
-                    id: row.get(0)?,
-                    tracking_id: row.get(1)?,
-                    time: row.get(2)?,
-                    inbound: row.get(3)?,
-                    content: row.get(4)?,
-                })
-            })?
-            .collect::<Result<_, _>>()?;
-        drop(stmt);
+        let mapper = |row: &rusqlite::Row| {
+            Ok(Message {
+                id: row.get(0)?,
+                tracking_id: row.get(1)?,
+                time: row.get(2)?,
+                inbound: row.get(3)?,
+                content: row.get(4)?,
+            })
+        };
+        let res = match (&limits.before_after, &limits.limit) {
+            (Some(BeforeAfter::Before(before)), None) => cached_query_map(
+                &*conn, 
+                "SELECT id FROM messages WHERE user_id = ?1 AND id < ?2 ORDER BY id DESC",
+                params![&pubkey.as_bytes()[..], before],
+                mapper,
+            )?,
+            (Some(BeforeAfter::Before(before)), Some(limit)) => cached_query_map(
+                &*conn, 
+                "SELECT id FROM messages WHERE user_id = ?1 AND id < ?2 ORDER BY id DESC LIMIT ?3",
+                params![&pubkey.as_bytes()[..], before, *limit as i64],
+                mapper,
+            )?,
+            (Some(BeforeAfter::After(after)), None) => cached_query_map(
+                &*conn,
+                "SELECT id FROM messages WHERE user_id = ?1 AND id > ?2 ORDER BY id ASC",
+                params![&pubkey.as_bytes()[..], after],
+                mapper,
+            )?,
+            (Some(BeforeAfter::After(after)), Some(limit)) => cached_query_map(
+                &*conn,
+                "SELECT id FROM messages WHERE user_id = ?1 AND id > ?2 ORDER BY id ASC LIMIT ?3",
+                params![&pubkey.as_bytes()[..], after, *limit as i64],
+                mapper,
+            )?,
+            (None, None) => cached_query_map(
+                &*conn,
+                "SELECT id FROM messages WHERE user_id = ?1 ORDER BY id DESC",
+                params![&pubkey.as_bytes()[..]],
+                mapper,
+            )?,
+            (None, Some(limit)) => cached_query_map(
+                &*conn,
+                "SELECT id FROM messages WHERE user_id = ?1 ORDER BY id DESC LIMIT ?2",
+                params![&pubkey.as_bytes()[..], *limit as i64],
+                mapper,
+            )?,
+        };
         conn.commit()?;
         Ok::<_, Error>(res)
     })
@@ -187,43 +272,56 @@ pub async fn get_new_messages(
     let res = tokio::task::spawn_blocking(move || {
         let mut gconn = CONN.lock();
         let conn = gconn.transaction()?;
-        let id: Option<i64> = conn.query_row(
+        let id: Option<i64> = cached_query_row(
+            &*conn, 
             "SELECT id FROM messages WHERE user_id = ?1 AND read = false ORDER BY id ASC LIMIT 1",
             params![&pubkey.as_bytes()[..]],
             |row| row.get(0),
-        ).optional()?;
+        )?;
         let id = if let Some(id) = id {
             id
         } else {
             return Ok(Vec::new());
         };
         if mark_as_read {
-            conn.execute(
-                &format!(
-                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 AND id >= ?2 ORDER BY id ASC{})",
-                    if let Some(limit) = limit { format!(" LIMIT {}", limit) } else { "".to_owned() }
-                ),
-                params![&pubkey.as_bytes()[..]]
-            )?;
+            if let Some(limit) = limit {
+                cached_exec(
+                    &*conn,
+                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 AND id >= ?2 ORDER BY id ASC LIMIT ?3)",
+                    params![&pubkey.as_bytes()[..], id, limit as i64]
+                )?;
+            } else {
+                cached_exec(
+                    &*conn,
+                    "UPDATE messages SET read = true WHERE user_id = ?1 AND id IN (SELECT id FROM messages WHERE user_id = ?1 AND id >= ?2 ORDER BY id ASC)",
+                    params![&pubkey.as_bytes()[..], id]
+                )?;
+            }
         }
-        let mut stmt = conn.prepare_cached(
-            &format!(
-                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 AND id >= ?2 ORDER BY id ASC{}",
-                if let Some(limit) = limit { format!(" LIMIT {}", limit) } else { "".to_owned() }
-            ),
-        )?;
-        let res = stmt
-            .query_map(params![&pubkey.as_bytes()[..], id], |row| {
-                Ok(Message {
-                    id: row.get(0)?,
-                    tracking_id: row.get(1)?,
-                    time: row.get(2)?,
-                    inbound: row.get(3)?,
-                    content: row.get(4)?,
-                })
-            })?
-            .collect::<Result<_, _>>()?;
-        drop(stmt);
+        let mapper = |row: &rusqlite::Row| {
+            Ok(Message {
+                id: row.get(0)?,
+                tracking_id: row.get(1)?,
+                time: row.get(2)?,
+                inbound: row.get(3)?,
+                content: row.get(4)?,
+            })
+        };
+        let res = if let Some(limit) = limit {
+            cached_query_map(
+                &*conn,
+                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 AND id >= ?2 ORDER BY id ASC LIMIT ?3",
+                params![&pubkey.as_bytes()[..], id, limit as i64],
+                mapper
+            )?
+        } else {
+            cached_query_map(
+                &*conn,
+                "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 AND id >= ?2 ORDER BY id ASC",
+                params![&pubkey.as_bytes()[..], id],
+                mapper
+            )?
+        };
         conn.commit()?;
         Ok::<_, Error>(res)
     })

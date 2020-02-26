@@ -192,7 +192,7 @@ async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
     }
 }
 
-#[tokio::main(core_threads = 8)]
+#[tokio::main(core_threads = 4)]
 async fn main() {
     println!("USING PROXY: {:?}", &*PROXY);
     let mig = crate::migrations::migrate();
