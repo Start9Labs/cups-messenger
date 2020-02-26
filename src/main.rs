@@ -96,7 +96,7 @@ async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
                         match req_data[0] {
                             0 => crate::message::send(crate::message::NewOutboundMessage {
                                 tracking_id: Some(Uuid::from_slice(&req_data[1..17])?)
-                                    .filter(|a| a.is_nil()),
+                                    .filter(|a| !a.is_nil()),
                                 to: PublicKey::from_bytes(&req_data[17..49])?,
                                 time: std::time::UNIX_EPOCH
                                     .elapsed()
