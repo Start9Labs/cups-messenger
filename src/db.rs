@@ -1,8 +1,8 @@
 use ed25519_dalek::PublicKey;
 use failure::Error;
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
+use parking_lot::Mutex;
 use rusqlite::params;
+use rusqlite::Connection;
 use rusqlite::OptionalExtension;
 use uuid::Uuid;
 
@@ -10,15 +10,13 @@ use crate::message::{NewInboundMessage, NewOutboundMessage};
 use crate::query::BeforeAfter;
 use crate::query::Limits;
 
-pub type DbPool = Pool<SqliteConnectionManager>;
 lazy_static::lazy_static! {
-    pub static ref POOL: DbPool = Pool::builder().max_size(8).build(SqliteConnectionManager::file("messages.db")).expect("POOL");
+    pub static ref CONN: Mutex<Connection> = Mutex::new(Connection::open("messages.db").expect("sqlite connection"));
 }
 
 pub async fn save_in_message(message: NewInboundMessage) -> Result<(), Error> {
-    let pool = POOL.clone();
     tokio::task::spawn_blocking(move || {
-        let conn = pool.get()?;
+        let conn = CONN.lock();
         conn.execute(
             "INSERT INTO messages (user_id, inbound, time, content) VALUES (?1, true, ?2, ?3)",
             params![&message.from.as_bytes()[..], message.time, message.content],
@@ -30,9 +28,8 @@ pub async fn save_in_message(message: NewInboundMessage) -> Result<(), Error> {
 }
 
 pub async fn save_out_message(message: NewOutboundMessage) -> Result<(), Error> {
-    let pool = POOL.clone();
     tokio::task::spawn_blocking(move || {
-        let conn = pool.get()?;
+        let conn = CONN.lock();
         conn.execute(
             "INSERT INTO messages (tracking_id, user_id, inbound, time, content, read) VALUES (?1, ?2, false, ?3, ?4, true)",
             params![message.tracking_id, &message.to.as_bytes()[..], message.time, message.content],
@@ -44,9 +41,8 @@ pub async fn save_out_message(message: NewOutboundMessage) -> Result<(), Error> 
 }
 
 pub async fn save_user(pubkey: PublicKey, name: String) -> Result<(), Error> {
-    let pool = POOL.clone();
     tokio::task::spawn_blocking(move || {
-        let conn = pool.get()?;
+        let conn = CONN.lock();
         conn.execute(
             "INSERT INTO users (id, name) VALUES (?1, ?2) ON CONFLICT(id) DO UPDATE SET name = excluded.name",
             params![&pubkey.as_bytes()[..], name],
@@ -58,9 +54,8 @@ pub async fn save_user(pubkey: PublicKey, name: String) -> Result<(), Error> {
 }
 
 pub async fn del_user(pubkey: PublicKey) -> Result<(), Error> {
-    let pool = POOL.clone();
     let res = tokio::task::spawn_blocking(move || {
-        let conn = pool.get()?;
+        let conn = CONN.lock();
         conn.execute(
             "DELETE FROM users WHERE id = ?1",
             params![&pubkey.as_bytes()[..]],
@@ -79,10 +74,9 @@ pub struct UserInfo {
 }
 
 pub async fn get_user_info() -> Result<Vec<UserInfo>, Error> {
-    let pool = POOL.clone();
     let res = tokio::task::spawn_blocking(move || {
-        let conn = pool.get()?;
-        let mut stmt = conn.prepare(
+        let conn = CONN.lock();
+        let mut stmt = conn.prepare_cached(
             "SELECT
                 messages.user_id,
                 users.name,
@@ -138,10 +132,9 @@ pub async fn get_messages(
     limits: Limits,
     mark_as_read: bool,
 ) -> Result<Vec<Message>, Error> {
-    let pool = POOL.clone();
     let res = tokio::task::spawn_blocking(move || {
-        let mut gconn = pool.get()?;
-        let conn = gconn.transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)?;
+        let mut gconn = CONN.lock();
+        let conn = gconn.transaction()?;
         if mark_as_read {
             conn.execute(
                 &format!(
@@ -156,7 +149,7 @@ pub async fn get_messages(
                 params![&pubkey.as_bytes()[..]]
             )?;
         }
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             &format!(
                 "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 {}{}",
                 match &limits.before_after {
@@ -191,10 +184,9 @@ pub async fn get_new_messages(
     limit: Option<usize>,
     mark_as_read: bool,
 ) -> Result<Vec<Message>, Error> {
-    let pool = POOL.clone();
     let res = tokio::task::spawn_blocking(move || {
-        let mut gconn = pool.get()?;
-        let conn = gconn.transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)?;
+        let mut gconn = CONN.lock();
+        let conn = gconn.transaction()?;
         let id: Option<i64> = conn.query_row(
             "SELECT id FROM messages WHERE user_id = ?1 AND read = false ORDER BY id ASC LIMIT 1",
             params![&pubkey.as_bytes()[..]],
@@ -214,7 +206,7 @@ pub async fn get_new_messages(
                 params![&pubkey.as_bytes()[..]]
             )?;
         }
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             &format!(
                 "SELECT id, tracking_id, time, inbound, content FROM messages WHERE user_id = ?1 AND id >= ?2 ORDER BY id ASC{}",
                 if let Some(limit) = limit { format!(" LIMIT {}", limit) } else { "".to_owned() }

@@ -4,10 +4,9 @@ use rusqlite::params;
 use rusqlite::OptionalExtension;
 
 pub async fn migrate() -> Result<(), Error> {
-    let pool = crate::db::POOL.clone();
     tokio::task::spawn_blocking(move || {
-        let mut gconn = pool.get()?;
-        let conn = gconn.transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)?;
+        let mut gconn = crate::db::CONN.lock();
+        let conn = gconn.transaction()?;
         init(&conn)?;
         tracking_ids(&conn)?;
         conn.commit()?;

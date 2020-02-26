@@ -12,8 +12,6 @@ tokio = { version = "0.2", features = ["full"] }
 hyper = "0.13.2"
 hyper-tls = "0.4.1"
 rusqlite = { version = "0.21.0", features = ["bundled", "blob", "uuid"] }
-r2d2 = "0.8.8"
-r2d2_sqlite = "0.14.0"
 failure = "0.1.6"
 lazy_static = "1.4.0"
 ed25519-dalek = "1.0.0-pre.3"
@@ -25,3 +23,4 @@ sha3 = "0.8.2"
 futures = "0.3.4"
 base64 = "0.11.0"
 uuid = "0.8.1"
+parking_lot = "0.10.0"
