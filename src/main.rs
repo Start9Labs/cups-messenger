@@ -96,13 +96,13 @@ async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
                         match req_data[0] {
                             0 => crate::message::send(crate::message::NewOutboundMessage {
                                 tracking_id: Some(Uuid::from_slice(&req_data[1..17])?)
-                                    .filter(Uuid::is_nil),
+                                    .filter(|a| !a.is_nil()),
                                 to: PublicKey::from_bytes(&req_data[17..49])?,
                                 time: std::time::UNIX_EPOCH
                                     .elapsed()
                                     .map(|a| a.as_secs() as i64)
                                     .unwrap_or_else(|a| a.duration().as_secs() as i64 * -1),
-                                content: String::from_utf8(req_data[33..].to_vec())?,
+                                content: String::from_utf8(req_data[49..].to_vec())?,
                             })
                             .await
                             .map(|_| Body::empty())

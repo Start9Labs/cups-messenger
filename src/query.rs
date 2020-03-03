@@ -77,7 +77,7 @@ pub async fn get_user_info() -> Result<Vec<u8>, Error> {
 }
 
 pub async fn get_messages(pubkey: PublicKey, limits: Limits) -> Result<Vec<u8>, Error> {
-    let dbmsgs = crate::db::get_messages(pubkey, limits, false).await?;
+    let dbmsgs = crate::db::get_messages(pubkey, limits, true).await?;
     let mut res = Vec::new();
     for msg in dbmsgs {
         if msg.inbound {
