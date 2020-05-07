@@ -25,8 +25,8 @@ mod wire;
 // };
 pub const VERSION: [u8; 24] = [
     0, 0, 0, 0, 0, 0, 0, 0, // 0_u64
-    0, 0, 0, 0, 0, 0, 0, 2, // 1_u64
-    0, 0, 0, 0, 0, 0, 0, 0, // 1_u64
+    0, 0, 0, 0, 0, 0, 0, 2, // 2_u64
+    0, 0, 0, 0, 0, 0, 0, 4, // 1_u64
 ];
 
 #[derive(serde::Deserialize)]
@@ -122,7 +122,7 @@ async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
                     }
                 } else {
                     Response::builder()
-                        .status(400)
+                        .status(401)
                         .body(Body::empty())
                         .map_err(From::from)
                 }
