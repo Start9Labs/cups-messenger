@@ -53,13 +53,13 @@ Unauthenticated `GET` with no query
 
 ## Building For ARM
 
--- from cups on x86
-$rust-musl-builder cargo +beta build --release
-$rust-musl-builder musl-strip ./target/armv7-unknown-linux-musleabihf/release/cups
-$scp ./target/armv7-unknown-linux-musleabihf/release/cups <EMBASSY>:<path/to/cups>/target/armv7-unknown-linux-musleabihf/release/cups
+from cups on x86
+- $rust-musl-builder cargo +beta build --release
+- $rust-musl-builder musl-strip ./target/armv7-unknown-linux-musleabihf/release/cups
+- $scp ./target/armv7-unknown-linux-musleabihf/release/cups <EMBASSY>:<path/to/cups>/target/armv7-unknown-linux-musleabihf/release/cups
 
--- from cups on EMBASSY
-sudo appmgr rm cups
-docker build --tag start9/cups .
-docker save start9/cups > image.tar
-docker rmi start9/cups
+from cups on EMBASSY
+- sudo appmgr rm cups
+- docker build --tag start9/cups .
+- docker save start9/cups > image.tar
+- docker rmi start9/cups
