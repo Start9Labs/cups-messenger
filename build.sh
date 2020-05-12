@@ -1,6 +1,6 @@
 #!/bin/bash
 
-appmgr rm --purge cups
+appmgr rm cups
 rm cups.s9pk
 docker build --tag start9/cups .
 rm image.tar
