@@ -104,12 +104,19 @@ pub async fn save_user(pubkey: PublicKey, name: String) -> Result<(), Error> {
 
 pub async fn del_user(pubkey: PublicKey) -> Result<(), Error> {
     let res = tokio::task::spawn_blocking(move || {
-        let conn = POOL.get()?;
+        let mut gconn = POOL.get()?;
+        let conn = gconn.transaction()?;
         cached_exec(
             &*conn,
             "DELETE FROM users WHERE id = ?1",
             params![&pubkey.as_bytes()[..]],
         )?;
+        cached_exec(
+            &*conn,
+            "DELETE FROM messages WHERE user_id = ?1",
+            params![&pubkey.as_bytes()[..]],
+        )?;
+        conn.commit()?;
         Ok::<_, Error>(())
     })
     .await??;
