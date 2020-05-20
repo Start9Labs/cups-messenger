@@ -7,6 +7,7 @@ use uuid::Uuid;
 #[serde(rename_all = "camelCase")]
 pub enum Query {
     Users,
+    Login,
     Messages {
         pubkey: String,
         #[serde(flatten)]
@@ -37,6 +38,7 @@ pub enum BeforeAfter {
 pub async fn handle(q: Query) -> Result<Vec<u8>, Error> {
     match q {
         Query::Users => get_user_info().await,
+        Query::Login => Ok(Vec::new()),
         Query::Messages { pubkey, limits } => {
             get_messages(
                 PublicKey::from_bytes(
