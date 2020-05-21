@@ -2,6 +2,10 @@ use ed25519_dalek::PublicKey;
 use failure::Error;
 use uuid::Uuid;
 
+const fn const_true() -> bool {
+    true
+}
+
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +16,8 @@ pub enum Query {
         pubkey: String,
         #[serde(flatten)]
         limits: Limits,
+        #[serde(default = "const_true")]
+        mark_as_read: bool,
     },
     New {
         pubkey: String,
@@ -39,13 +45,18 @@ pub async fn handle(q: Query) -> Result<Vec<u8>, Error> {
     match q {
         Query::Users => get_user_info().await,
         Query::Login => Ok(Vec::new()),
-        Query::Messages { pubkey, limits } => {
+        Query::Messages {
+            pubkey,
+            limits,
+            mark_as_read,
+        } => {
             get_messages(
                 PublicKey::from_bytes(
                     &base32::decode(base32::Alphabet::RFC4648 { padding: false }, &pubkey)
                         .ok_or_else(|| failure::format_err!("invalid pubkey"))?,
                 )?,
                 limits,
+                mark_as_read,
             )
             .await
         }
@@ -78,8 +89,12 @@ pub async fn get_user_info() -> Result<Vec<u8>, Error> {
     Ok(res)
 }
 
-pub async fn get_messages(pubkey: PublicKey, limits: Limits) -> Result<Vec<u8>, Error> {
-    let dbmsgs = crate::db::get_messages(pubkey, limits, true).await?;
+pub async fn get_messages(
+    pubkey: PublicKey,
+    limits: Limits,
+    mark_as_read: bool,
+) -> Result<Vec<u8>, Error> {
+    let dbmsgs = crate::db::get_messages(pubkey, limits, mark_as_read).await?;
     let mut res = Vec::new();
     for msg in dbmsgs {
         if msg.inbound {
