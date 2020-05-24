@@ -10,7 +10,10 @@ const fn const_true() -> bool {
 #[serde(tag = "type")]
 #[serde(rename_all = "camelCase")]
 pub enum Query {
-    Users,
+    Users {
+        #[serde(default)]
+        include_recent_messages: u8,
+    },
     Login,
     Messages {
         pubkey: String,
@@ -43,23 +46,24 @@ pub enum BeforeAfter {
 
 pub async fn handle(q: Query) -> Result<Vec<u8>, Error> {
     match q {
-        Query::Users => get_user_info().await,
+        Query::Users {
+            include_recent_messages,
+        } => get_user_info(include_recent_messages).await,
         Query::Login => Ok(Vec::new()),
         Query::Messages {
             pubkey,
             limits,
             mark_as_read,
-        } => {
-            get_messages(
-                PublicKey::from_bytes(
-                    &base32::decode(base32::Alphabet::RFC4648 { padding: false }, &pubkey)
-                        .ok_or_else(|| failure::format_err!("invalid pubkey"))?,
-                )?,
-                limits,
-                mark_as_read,
-            )
-            .await
-        }
+        } => get_messages(
+            PublicKey::from_bytes(
+                &base32::decode(base32::Alphabet::RFC4648 { padding: false }, &pubkey)
+                    .ok_or_else(|| failure::format_err!("invalid pubkey"))?,
+            )?,
+            limits,
+            mark_as_read,
+        )
+        .await
+        .map(|(_, a)| a),
         Query::New { pubkey, limit } => {
             get_new(
                 PublicKey::from_bytes(
@@ -73,7 +77,7 @@ pub async fn handle(q: Query) -> Result<Vec<u8>, Error> {
     }
 }
 
-pub async fn get_user_info() -> Result<Vec<u8>, Error> {
+pub async fn get_user_info(include_recent_messages: u8) -> Result<Vec<u8>, Error> {
     let dbinfo = crate::db::get_user_info().await?;
     let mut res = Vec::new();
     for info in dbinfo {
@@ -85,6 +89,19 @@ pub async fn get_user_info() -> Result<Vec<u8>, Error> {
         } else {
             res.push(0);
         }
+        if include_recent_messages > 0 {
+            let (count, messages) = get_messages(
+                info.pubkey,
+                Limits {
+                    before_after: None,
+                    limit: Some(include_recent_messages as usize),
+                },
+                false,
+            )
+            .await?;
+            res.push(count as u8);
+            res.extend(messages);
+        }
     }
     Ok(res)
 }
@@ -93,8 +110,9 @@ pub async fn get_messages(
     pubkey: PublicKey,
     limits: Limits,
     mark_as_read: bool,
-) -> Result<Vec<u8>, Error> {
+) -> Result<(usize, Vec<u8>), Error> {
     let dbmsgs = crate::db::get_messages(pubkey, limits, mark_as_read).await?;
+    let count = dbmsgs.len();
     let mut res = Vec::new();
     for msg in dbmsgs {
         if msg.inbound {
@@ -108,7 +126,7 @@ pub async fn get_messages(
         res.extend_from_slice(&u64::to_be_bytes(msg.content.as_bytes().len() as u64));
         res.extend_from_slice(msg.content.as_bytes());
     }
-    Ok(res)
+    Ok((count, res))
 }
 
 pub async fn get_new(pubkey: PublicKey, limit: Option<usize>) -> Result<Vec<u8>, Error> {
