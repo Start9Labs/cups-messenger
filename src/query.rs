@@ -10,11 +10,14 @@ const fn const_true() -> bool {
 #[serde(tag = "type")]
 #[serde(rename_all = "camelCase")]
 pub enum Query {
+    #[serde(rename_all = "camelCase")]
     Users {
         #[serde(default)]
+        #[serde(deserialize_with = "crate::util::deser_parse")]
         include_recent_messages: u8,
     },
     Login,
+    #[serde(rename_all = "camelCase")]
     Messages {
         pubkey: String,
         #[serde(flatten)]
@@ -22,6 +25,7 @@ pub enum Query {
         #[serde(default = "const_true")]
         mark_as_read: bool,
     },
+    #[serde(rename_all = "camelCase")]
     New {
         pubkey: String,
         #[serde(deserialize_with = "crate::util::deser_parse_opt")]
@@ -90,6 +94,7 @@ pub async fn get_user_info(include_recent_messages: u8) -> Result<Vec<u8>, Error
             res.push(0);
         }
         if include_recent_messages > 0 {
+            println!("including {} recent messages", include_recent_messages);
             let (count, messages) = get_messages(
                 info.pubkey,
                 Limits {
