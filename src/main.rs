@@ -195,6 +195,7 @@ async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
 #[tokio::main(core_threads = 4)]
 async fn main() {
     println!("USING PROXY: {:?}", &*PROXY);
+    &*CONFIG;
     let mig = crate::migrations::migrate();
     // Construct our SocketAddr to listen on...
     let addr = SocketAddr::from(([0, 0, 0, 0], 59001));
