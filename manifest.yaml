@@ -1,11 +1,16 @@
 compat: v0
 id: cups
-version: "0.2.4"
+version: "0.3.0"
 title: "Cups"
 description:
   short: "Peer-to-Peer Encrypted Messaging"
   long: "A peer-to-peer encrypted messaging platform that operates over tor."
-release-notes: Added headers for Consulate caching
+release-notes: |
+  Big UX overhaul, including the code requisite to power the new Cups Messenger mobile application.
+  Check out "Cups Messenger" on the iOS and Google Play store
+  - Usable from your phone without the Tor browser.
+  - New Dark Theme.
+  - Message Previews + Old conversation removal
 ports:
   - internal: 59001
     tor: 59001
