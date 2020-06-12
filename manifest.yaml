@@ -1,6 +1,6 @@
 compat: v0
 id: cups
-version: "0.3.0"
+version: "0.3.1"
 title: "Cups"
 description:
   short: "Peer-to-Peer Encrypted Messaging"
@@ -11,6 +11,7 @@ release-notes: |
   - Usable from your phone without the Tor browser.
   - New Dark Theme.
   - Message Previews + Old conversation removal
+  - Fixes bugs from 0.3.0
 ports:
   - internal: 59001
     tor: 59001
