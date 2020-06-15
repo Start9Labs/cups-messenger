@@ -2,7 +2,7 @@
 This guide assumes you are running a debian-based operating system and are logged in as root.
 
   - Clone the repo
-    - `git clone https://github.com/Start9Labs/cups-messenger-server.git`
+    - `git clone https://github.com/Start9Labs/cups-messenger.git`
     - This document assumes you have cloned to `~/cups-messenger`
     - `cd ~/cups-messenger`
     - `git submodule update --init`
