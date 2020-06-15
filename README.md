@@ -51,15 +51,24 @@ Unauthenticated `GET` with no query
 
 `<Major Version (u64 BE)> <Minor Version (u64 BE)> <Patch Version (u64 BE)>` 
 
-## Building For ARM
+## Building s9pk for Embassy
 
-from cups on x86
-- $rust-musl-builder cargo +beta build --release
-- $rust-musl-builder musl-strip ./target/armv7-unknown-linux-musleabihf/release/cups
-- $scp ./target/armv7-unknown-linux-musleabihf/release/cups <EMBASSY>:<path/to/cups>/target/armv7-unknown-linux-musleabihf/release/cups
+from cups dir on x86
+```bash
+rust-musl-builder cargo +beta build --release
+rust-musl-builder musl-strip ./target/armv7-unknown-linux-musleabihf/release/cups
+scp ./target/armv7-unknown-linux-musleabihf/release/cups <EMBASSY>:<path/to/cups>/target/armv7-unknown-linux-musleabihf/release/cups
+```
 
-from cups on EMBASSY
-- sudo appmgr rm cups
-- docker build --tag start9/cups .
-- docker save start9/cups > image.tar
-- docker rmi start9/cups
+from cups dir on EMBASSY
+```bash
+sudo appmgr rm cups
+docker build --tag start9/cups .
+docker save start9/cups > image.tar
+docker rmi start9/cups
+sudo appmgr pack $(pwd) -o cups.s9pk
+```
+
+## Building for Non-Embassy devices
+
+See NONEMBASSY.md

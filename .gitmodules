@@ -1,0 +1,3 @@
+[submodule "cups-messenger-ui"]
+	path = cups-messenger-ui
+	url = https://github.com/Start9Labs/cups-messenger-ui.git
