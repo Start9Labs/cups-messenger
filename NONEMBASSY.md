@@ -38,6 +38,8 @@ HiddenServiceVersion 3
   - Build cups server
     - Make sure you have the [Rust toolchain](https://rustup.rs)
     - `cargo build --release`
+    - NOTE: the docker image is designed for musl. If you are not on a musl platform, you must cross compile using [cross](https://crates.io/crates/cross)
+      - You must also replace target/release with target/<your platform>/release everwhere in this guide, as well as in nonembassy.Dockerfile
     - (Optional) `strip target/release/cups`
   - Install Docker
     - `apt install docker.io`
@@ -49,14 +51,15 @@ docker create \
     --restart unless-stopped \
     --name cups \
     --mount type=bind,src=/var/opt/cups,dst=/root \
-    --env TOR_ADDRESS=$(trim /var/lib/tor/cups_service/hostname) \
-    --env TOR_KEY=$(tail -c 64 /var/lib/tor/cups_service/hs_ed25519_secret_key | base32) \
-    --net bridge
+    --env TOR_ADDRESS=$(cat /var/lib/tor/cups_service/hostname | sed 's/\n*$//g') \
+    --env TOR_KEY=$(tail -c 64 /var/lib/tor/cups_service/hs_ed25519_secret_key | base32 -w0 | sed 's/\n*$//g') \
+    --net bridge \
+    start9/cups
 ```
   - Start the Docker Container
     - `docker start cups`
   - Get IP address of the Docker Container
-    - `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'`
+    - `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' cups`
   - Update hidden service configuration with the container IP
     - `vim /etc/tor/torrc`
     - Change `127.0.0.1` in the HiddenServicePort config to the result of the previous step
