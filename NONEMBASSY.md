@@ -12,6 +12,8 @@ This guide assumes you are running a debian-based operating system and are logge
     - `vim /etc/tor/torrc`
     - Add the following lines:
 ```
+SOCKSPort 0.0.0.0:9050 # This makes your Tor proxy available to your network. If your server is not behind a NAT that you control, make sure to set a SOCKS policy, or bind to the host ip on the docker0 interface
+
 HiddenServiceDir /var/lib/tor/cups_service
 HiddenServicePort 80 127.0.0.1:80
 HiddenServicePort 59001 127.0.0.1:59001
