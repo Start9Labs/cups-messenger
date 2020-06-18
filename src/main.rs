@@ -16,17 +16,10 @@ mod query;
 mod util;
 mod wire;
 
-// pub const VERSION: [u8; 24] = {
-//     let mut v = [0; 24];
-//     v[0..8].clone_from_slice(&u64::to_be_bytes(0));
-//     v[8..16].clone_from_slice(&u64::to_be_bytes(1));
-//     v[16..24].clone_from_slice(&u64::to_be_bytes(1));
-//     v
-// };
 pub const VERSION: [u8; 24] = [
     0, 0, 0, 0, 0, 0, 0, 0, // 0_u64
     0, 0, 0, 0, 0, 0, 0, 3, // 3_u64
-    0, 0, 0, 0, 0, 0, 0, 1, // 1_u64
+    0, 0, 0, 0, 0, 0, 0, 2, // 2_u64
 ];
 
 #[derive(serde::Deserialize)]

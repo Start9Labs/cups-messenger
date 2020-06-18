@@ -58,6 +58,11 @@ from cups dir on x86
 rust-musl-builder cargo +beta build --release
 rust-musl-builder musl-strip ./target/armv7-unknown-linux-musleabihf/release/cups
 scp ./target/armv7-unknown-linux-musleabihf/release/cups <EMBASSY>:<path/to/cups>/target/armv7-unknown-linux-musleabihf/release/cups
+cd cups-messenger-ui
+npm i
+npm run build-prod
+ssh <EMBASSY> "rm -rf <path/to/cups>/assets/www"
+scp -r www <EMBASSY>:<path/to/cups>/assets
 ```
 
 from cups dir on EMBASSY
@@ -72,3 +77,13 @@ sudo appmgr pack $(pwd) -o cups.s9pk
 ## Building for Non-Embassy devices
 
 See NONEMBASSY.md
+
+## Publishing a new version
+  - Update semver in:
+    - src/main.rs
+    - Cargo.toml
+    - cups-messenger-ui/package.json
+    - assets/httpd.conf
+    - manifest.yaml (release notes too)
+  - [Build s9pk for Embassy](https://github.com/Start9Labs/cups-messenger/blob/master/README.md#building-s9pk-for-embassy)
+  - [Publish](https://github.com/Start9Labs/operations/blob/master/PUBLISHING.md)
