@@ -67,6 +67,7 @@ scp -r www <EMBASSY>:<path/to/cups>/assets
 
 from cups dir on EMBASSY
 ```bash
+git pull origin master #Get latest versioning
 sudo appmgr rm cups
 docker build --tag start9/cups .
 docker save start9/cups > image.tar
@@ -85,5 +86,6 @@ See NONEMBASSY.md
     - cups-messenger-ui/package.json
     - assets/httpd.conf
     - manifest.yaml (release notes too)
+  - git push origin master #The above updates needed on Embassy later
   - [Build s9pk for Embassy](https://github.com/Start9Labs/cups-messenger/blob/master/README.md#building-s9pk-for-embassy)
   - [Publish](https://github.com/Start9Labs/operations/blob/master/PUBLISHING.md)
