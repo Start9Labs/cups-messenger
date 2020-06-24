@@ -1,17 +1,13 @@
 compat: v0
 id: cups
-version: "0.3.3"
+version: "0.3.4"
 title: "Cups"
 description:
   short: "Peer-to-Peer Encrypted Messaging"
   long: "A peer-to-peer encrypted messaging platform that operates over tor."
 release-notes: | 
-  Features
-    - Conversation manual refresh
   Bug Fixes
-    - Contacts hilighting for unread messages
-    - Avatar first initial centering
-    - Styling improvements
+    - Register a SIGTERM handler for graceful shutdown
 ports:
   - internal: 59001
     tor: 59001
