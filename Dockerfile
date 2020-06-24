@@ -3,6 +3,7 @@ FROM alpine
 EXPOSE 59001 80
 
 RUN apk add lighttpd
+RUN apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/testing catatonit
 
 ADD ./target/armv7-unknown-linux-musleabihf/release/cups /usr/local/bin/cups
 RUN chmod a+x /usr/local/bin/cups
