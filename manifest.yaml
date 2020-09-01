@@ -7,7 +7,7 @@ description:
   long: "A peer-to-peer encrypted messaging platform that operates over tor."
 release-notes: | 
   Bug Fixes
-    - Register a SIGTERM handler for graceful shutdown
+    - Upgrade UI to gracefully handle Consulate browser
 ports:
   - internal: 59001
     tor: 59001
