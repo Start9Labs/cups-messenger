@@ -57,6 +57,7 @@ from cups dir on x86
 ```bash
 rust-musl-builder cargo +beta build --release
 rust-musl-builder musl-strip ./target/armv7-unknown-linux-musleabihf/release/cups
+ssh <EMBASSY> "mkdir -p <path/to/cups>/target/armv7-unknown-linux-musleabihf/release"
 scp ./target/armv7-unknown-linux-musleabihf/release/cups <EMBASSY>:<path/to/cups>/target/armv7-unknown-linux-musleabihf/release/cups
 cd cups-messenger-ui
 npm i
@@ -72,6 +73,7 @@ docker build --tag start9/cups .
 docker save start9/cups > image.tar
 docker rmi start9/cups
 sudo appmgr pack $(pwd) -o cups.s9pk
+sudo appmgr install cups.s9pk
 ```
 
 ## Building for Non-Embassy devices
