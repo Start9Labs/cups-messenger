@@ -73,7 +73,7 @@ docker build --tag start9/cups .
 docker save start9/cups > image.tar
 docker rmi start9/cups
 sudo appmgr pack $(pwd) -o cups.s9pk
-sudo appmgr install cups.s9pk
+### To install locally: `sudo appmgr install cups.s9pk`
 ```
 
 ## Building for Non-Embassy devices
