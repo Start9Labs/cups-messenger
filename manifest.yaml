@@ -1,6 +1,6 @@
 compat: v0
 id: cups
-version: "0.3.4"
+version: "0.3.5"
 title: "Cups"
 description:
   short: "Peer-to-Peer Encrypted Messaging"
