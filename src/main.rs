@@ -189,10 +189,43 @@ async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
     }
 }
 
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct Metrics<'a> {
+    version: u8,
+    data: Vec<Metric<'a>>,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct Metric<'a> {
+    name: &'static str,
+    value: &'a str,
+    description: Option<&'static str>,
+    copyable: bool,
+    qr: bool,
+}
+
 #[tokio::main(core_threads = 4)]
 async fn main() {
     println!("USING PROXY: {:?}", &*PROXY);
     &*CONFIG;
+    let mut metrics = Vec::new();
+    metrics.push(Metric {
+        name: "Password",
+        value: &CONFIG.password,
+        description: None,
+        copyable: true,
+        qr: false,
+    });
+    serde_yaml::to_writer(
+        std::fs::File::create("/root/.bitcoin/start9/.stats.yaml.tmp").unwrap(),
+        &Metrics {
+            version: 1,
+            data: metrics,
+        },
+    )
+    .unwrap();
+    std::fs::rename("./start9/.stats.yaml.tmp", "./start9/stats.yaml").unwrap();
+
     let mig = crate::migrations::migrate();
     // Construct our SocketAddr to listen on...
     let addr = SocketAddr::from(([0, 0, 0, 0], 59001));
