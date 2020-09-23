@@ -1,10 +1,10 @@
 compat: v0
 id: cups
 version: "0.3.5"
-title: "Cups"
+title: "Cups Messenger"
 description:
-  short: "Peer-to-Peer Encrypted Messaging"
-  long: "A peer-to-peer encrypted messaging platform that operates over tor."
+  short: "Real private messaging"
+  long: "Cups is a private, self-hosted, peer-to-peer, Tor-based, instant messenger. Unlike other end-to-end encrypted messengers, with Cups on the Embassy there are no trusted third parties."
 release-notes: | 
   Bug Fixes
     - Upgrade UI to gracefully handle Consulate browser
