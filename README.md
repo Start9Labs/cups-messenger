@@ -1,5 +1,83 @@
 # cups
 
+## Building and running
+
+### Start9 Embassy
+[Go Here](https://github.com/Start9Labs/cups-wrapper)
+
+### Debian
+This guide assumes you are running a debian-based operating system and are logged in as root.
+
+  - Clone the repo
+    - `git clone https://github.com/Start9Labs/cups-messenger.git`
+    - This document assumes you have cloned to `~/cups-messenger`
+    - `cd ~/cups-messenger`
+    - `git submodule update --init`
+  - Install Tor
+    - `apt install tor`
+  - Set up Tor Hidden Service
+    - `vim /etc/tor/torrc`
+    - Add the following lines:
+```
+SOCKSPort 0.0.0.0:9050 # This makes your Tor proxy available to your network. If your server is not behind a NAT that you control, make sure to set a SOCKS policy, or bind to the host ip on the docker0 interface
+
+HiddenServiceDir /var/lib/tor/cups_service
+HiddenServicePort 80 127.0.0.1:80
+HiddenServicePort 59001 127.0.0.1:59001
+HiddenServiceVersion 3
+```
+  - Restart Tor
+    - `systemctl restart tor`
+  - Create a mount point for the container
+    - `mkdir -p /var/opt/cups/start9`
+  - Write config file
+    - `vim /var/opt/cups/start9/config.yaml`
+    - Add `password: <your password>` with the password you want to use
+  - Build Cups UI
+    - `cd cups-messenger-ui`
+    - Build
+      - `npm i`
+      - `npm run build-prod`
+    - Copy over result
+      - `cp -r www ../assets/www`
+    - Return to Cups
+      - `cd ..`
+  - Copy over assets
+    - `cp -r assets/* /var/opt/cups`
+  - Build cups server
+    - Make sure you have the [Rust toolchain](https://rustup.rs)
+    - `cargo build --release`
+    - NOTE: the docker image is designed for musl. If you are not on a musl platform, you must cross compile.
+      - [Here](https://github.com/messense/rust-musl-cross) is a useful tool for cross compiling to musl.
+      - You must also replace `target/release` with `target/<your platform>/release` everwhere in this guide, as well as in nonembassy.Dockerfile
+    - (Optional) `strip target/release/cups`
+  - Install Docker
+    - `apt install docker.io`
+  - Build the Docker Image
+    - `docker build . -f nonembassy.Dockerfile -t start9/cups`
+  - Create the Docker Container
+```bash
+docker create \
+    --restart unless-stopped \
+    --name cups \
+    --mount type=bind,src=/var/opt/cups,dst=/root \
+    --env TOR_ADDRESS=$(cat /var/lib/tor/cups_service/hostname | sed 's/\n*$//g') \
+    --env TOR_KEY=$(tail -c 64 /var/lib/tor/cups_service/hs_ed25519_secret_key | base32 -w0 | sed 's/\n*$//g') \
+    --net bridge \
+    start9/cups
+```
+  - Start the Docker Container
+    - `docker start cups`
+  - Get IP address of the Docker Container
+    - `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' cups`
+  - Update hidden service configuration with the container IP
+    - `vim /etc/tor/torrc`
+    - Change `127.0.0.1` in the HiddenServicePort config to the result of the previous step
+  - Restart Tor
+    - `systemctl restart tor`
+  - Your cups tor address can be found by running `cat /var/lib/tor/cups_service/hostname`
+
+
 ## API
 
 ### Authorization
@@ -51,41 +129,3 @@ Unauthenticated `GET` with no query
 
 `<Major Version (u64 BE)> <Minor Version (u64 BE)> <Patch Version (u64 BE)>` 
 
-## Building s9pk for Embassy
-
-from cups dir on x86
-```bash
-rust-musl-builder cargo +beta build --release
-rust-musl-builder musl-strip ./target/armv7-unknown-linux-musleabihf/release/cups
-ssh <EMBASSY> "mkdir -p <path/to/cups>/target/armv7-unknown-linux-musleabihf/release"
-scp ./target/armv7-unknown-linux-musleabihf/release/cups <EMBASSY>:<path/to/cups>/target/armv7-unknown-linux-musleabihf/release/cups
-cd cups-messenger-ui
-npm i
-npm run build-prod
-ssh <EMBASSY> "rm -rf <path/to/cups>/assets/www"
-scp -r www <EMBASSY>:<path/to/cups>/assets
-```
-
-from cups dir on EMBASSY
-```bash
-sudo appmgr rm cups
-docker build --tag start9/cups .
-docker save start9/cups > image.tar
-docker rmi start9/cups
-sudo appmgr pack $(pwd) -o cups.s9pk
-### To install locally: `sudo appmgr install cups.s9pk`
-```
-
-## Building for Non-Embassy devices
-
-See NONEMBASSY.md
-
-## Publishing a new version
-  - Update semver in:
-    - src/main.rs
-    - Cargo.toml
-    - cups-messenger-ui/package.json
-    - assets/httpd.conf
-    - manifest.yaml (release notes too)
-  - [Build s9pk for Embassy](https://github.com/Start9Labs/cups-messenger/blob/master/README.md#building-s9pk-for-embassy)
-  - [Publish](https://github.com/Start9Labs/operations/blob/master/PUBLISHING.md)

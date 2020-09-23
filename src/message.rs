@@ -23,12 +23,12 @@ pub async fn send(msg: NewOutboundMessage) -> Result<(), Error> {
     use sha3::{Digest, Sha3_256};
 
     let mut hasher = Sha3_256::new();
-    hasher.input(b".onion checksum");
-    hasher.input(msg.to.as_bytes());
-    hasher.input(&[3]);
+    hasher.update(b".onion checksum");
+    hasher.update(msg.to.as_bytes());
+    hasher.update(&[3]);
     let mut onion = Vec::with_capacity(35);
     onion.extend_from_slice(msg.to.as_bytes());
-    onion.extend_from_slice(&hasher.result()[..2]);
+    onion.extend_from_slice(&hasher.finalize()[..2]);
     onion.push(3);
     let onion_str =
         base32::encode(base32::Alphabet::RFC4648 { padding: false }, &onion).to_lowercase();

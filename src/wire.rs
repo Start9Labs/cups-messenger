@@ -1,4 +1,6 @@
-use ed25519_dalek::{ExpandedSecretKey, PublicKey, Signature};
+use std::convert::TryFrom;
+
+use ed25519_dalek::{ExpandedSecretKey, PublicKey, Signature, Verifier};
 use failure::Error;
 
 use crate::message::{NewInboundMessage, NewOutboundMessage};
@@ -16,7 +18,7 @@ pub fn parse(bytes: &[u8]) -> Result<NewInboundMessage, Error> {
             .get(1..33)
             .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::UnexpectedEof))?,
     )?;
-    let sig = Signature::from_bytes(
+    let sig = Signature::try_from(
         bytes
             .get(33..97)
             .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::UnexpectedEof))?,

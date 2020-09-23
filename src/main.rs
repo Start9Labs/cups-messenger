@@ -16,18 +16,22 @@ mod query;
 mod util;
 mod wire;
 
-pub const VERSION: [u8; 24] = [
-    0, 0, 0, 0, 0, 0, 0, 0, // 0_u64
-    0, 0, 0, 0, 0, 0, 0, 3, // 3_u64
-    0, 0, 0, 0, 0, 0, 0, 5, // 5_u64
-];
-
 #[derive(serde::Deserialize)]
 pub struct Config {
     pub password: String,
 }
 
 lazy_static::lazy_static! {
+    pub static ref MAJOR: [u8; 8] = u64::to_be_bytes(env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap());
+    pub static ref MINOR: [u8; 8] = u64::to_be_bytes(env!("CARGO_PKG_VERSION_MINOR").parse().unwrap());
+    pub static ref PATCH: [u8; 8] = u64::to_be_bytes(env!("CARGO_PKG_VERSION_PATCH").parse().unwrap());
+    pub static ref VERSION: [u8; 24] = {
+        let mut version = [0; 24];
+        version[..8].clone_from_slice(&*MAJOR);
+        version[8..16].clone_from_slice(&*MINOR);
+        version[16..].clone_from_slice(&*PATCH);
+        version
+    };
     pub static ref CONFIG: Config = serde_yaml::from_reader(std::fs::File::open("./start9/config.yaml").expect("./start9/config.yaml")).expect("./start9/config.yaml");
     pub static ref PROXY: reqwest::Proxy = reqwest::Proxy::http(&format!("socks5h://{}:9050", std::env::var("HOST_IP").expect("HOST_IP"))).expect("PROXY");
     pub static ref SECKEY: ed25519_dalek::ExpandedSecretKey =
