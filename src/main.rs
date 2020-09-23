@@ -217,7 +217,7 @@ async fn main() {
         qr: false,
     });
     serde_yaml::to_writer(
-        std::fs::File::create("/root/.bitcoin/start9/.stats.yaml.tmp").unwrap(),
+        std::fs::File::create("/root/start9/.stats.yaml.tmp").unwrap(),
         &Metrics {
             version: 1,
             data: metrics,
