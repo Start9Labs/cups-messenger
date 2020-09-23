@@ -1,6 +1,6 @@
 [package]
 name = "cups"
-version = "0.3.5"
+version = "0.3.6"
 authors = ["Aiden McClelland <me@drbonez.dev>"]
 edition = "2018"
 
