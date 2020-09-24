@@ -212,7 +212,7 @@ async fn main() {
     metrics.push(Metric {
         name: "Password",
         value: &CONFIG.password,
-        description: None,
+        description: "Password for authenticating to your Cups service. This password can be updated in the Cups config page.",
         copyable: true,
         qr: false,
     });
