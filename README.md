@@ -49,7 +49,7 @@ HiddenServiceVersion 3
     - `cargo build --release`
     - NOTE: the docker image is designed for musl. If you are not on a musl platform, you must cross compile.
       - [Here](https://github.com/messense/rust-musl-cross) is a useful tool for cross compiling to musl.
-      - You must also replace `target/release` with `target/<your platform>/release` everwhere in this guide, as well as in nonembassy.Dockerfile
+      - You must also replace `target/release` with `target/<your platform>/release` everywhere in this guide, as well as in nonembassy.Dockerfile
     - (Optional) `strip target/release/cups`
   - Install Docker
     - `apt install docker.io`
