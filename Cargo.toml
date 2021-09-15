@@ -1,6 +1,6 @@
 [package]
 name = "cups"
-version = "0.3.6"
+version = "0.3.7"
 authors = ["Aiden McClelland <me@drbonez.dev>"]
 edition = "2018"
 
@@ -26,3 +26,4 @@ serde_urlencoded = "0.6.1"
 serde_yaml = "0.8.13"
 sha3 = "0.9.1"
 uuid = "0.8.1"
+openssl = { version="0.10.35", features=["vendored"] }

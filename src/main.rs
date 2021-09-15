@@ -33,7 +33,7 @@ lazy_static::lazy_static! {
         version
     };
     pub static ref CONFIG: Config = serde_yaml::from_reader(std::fs::File::open("./start9/config.yaml").expect("./start9/config.yaml")).expect("./start9/config.yaml");
-    pub static ref PROXY: reqwest::Proxy = reqwest::Proxy::http(&format!("socks5h://{}:9050", std::env::var("HOST_IP").expect("HOST_IP"))).expect("PROXY");
+    pub static ref PROXY: reqwest::Proxy = reqwest::Proxy::http("socks5h://embassy:9050").expect("PROXY");
     pub static ref SECKEY: ed25519_dalek::ExpandedSecretKey =
         ed25519_dalek::ExpandedSecretKey::from_bytes(
             &base32::decode(
