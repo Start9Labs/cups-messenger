@@ -17,8 +17,10 @@ mod util;
 mod wire;
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Config {
     pub password: String,
+    pub address_private_key: String,
 }
 
 lazy_static::lazy_static! {
@@ -38,7 +40,7 @@ lazy_static::lazy_static! {
         ed25519_dalek::ExpandedSecretKey::from_bytes(
             &base32::decode(
                 base32::Alphabet::RFC4648 { padding: false },
-                &std::env::var("TOR_KEY").expect("TOR_KEY"),
+                &CONFIG.address_private_key,
             ).expect("TOR_KEY"),
         ).expect("TOR_KEY");
 }
