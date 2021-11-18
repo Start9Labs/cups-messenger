@@ -1,29 +1,29 @@
 [package]
-name = "cups"
-version = "0.3.7"
 authors = ["Aiden McClelland <me@drbonez.dev>"]
 edition = "2018"
+name = "cups"
+version = "0.3.7"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 base32 = "0.4.0"
-base64 = "0.12.3"
+base64 = "0.13.0"
 ed25519-dalek = "1.0.1"
 failure = "0.1.8"
 futures = "0.3.5"
-hyper = "0.13.7"
-hyper-tls = "0.4.3"
+hyper = { version = "0.14.14", features = ["server"] }
+hyper-tls = "0.5.0"
 lazy_static = "1.4.0"
+openssl = { version = "0.10.35", features = ["vendored"] }
 parking_lot = "0.11.0"
-tokio = { version = "0.2", features = ["full"] }
 r2d2 = "0.8.9"
-r2d2_sqlite = "0.16.0"
-reqwest = { version = "0.10.8", features = ["socks"] }
-rusqlite = { version = "0.23.1", features = ["bundled", "blob", "uuid"] }
+r2d2_sqlite = "0.19.0"
+reqwest = { version = "0.11.6", features = ["socks"] }
+rusqlite = { version = "0.26.1", features = ["bundled", "blob", "uuid"] }
 serde = { version = "1.0", features = ["derive"] }
-serde_urlencoded = "0.6.1"
-serde_yaml = "0.8.13"
+serde_urlencoded = "0.7.0"
+serde_yaml = "0.8.21"
 sha3 = "0.9.1"
+tokio = { version = "1.13.0", features = ["full"] }
 uuid = "0.8.1"
-openssl = { version="0.10.35", features=["vendored"] }

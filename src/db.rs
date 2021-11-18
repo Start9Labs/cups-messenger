@@ -26,7 +26,7 @@ lazy_static::lazy_static! {
 
 pub fn cached_exec<P>(conn: &Connection, q: &str, params: P) -> Result<(), Error>
 where
-    P: IntoIterator,
+    P: IntoIterator + rusqlite::Params,
     P::Item: rusqlite::ToSql,
 {
     let mut stmt = conn.prepare_cached(q).with_context(|e| format!("{}: {}", q, e))?;
@@ -36,7 +36,7 @@ where
 
 pub fn cached_query_row<P, F, T>(conn: & Connection, q: &str, params: P, f: F) -> Result<Option<T>, Error>
 where
-    P: IntoIterator,
+    P: IntoIterator + rusqlite::Params,
     P::Item: rusqlite::ToSql,
     F: FnMut(&rusqlite::Row) -> Result<T, rusqlite::Error>
 {
@@ -47,7 +47,7 @@ where
 
 pub fn cached_query_map<P, F, T>(conn: &Connection, q: &str, params: P, f: F) -> Result<Vec<T>, Error>
 where
-    P: IntoIterator,
+    P: IntoIterator + rusqlite::Params,
     P::Item: rusqlite::ToSql,
     F: FnMut(&rusqlite::Row) -> Result<T, rusqlite::Error>
 {

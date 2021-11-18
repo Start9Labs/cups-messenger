@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 
 use ed25519_dalek::PublicKey;
 use failure::Error;
-use futures::StreamExt;
+use hyper::body::HttpBody;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server};
 use uuid::Uuid;
@@ -48,7 +48,7 @@ lazy_static::lazy_static! {
 async fn get_bytes(body: &mut Body) -> Result<Vec<u8>, Error> {
     let mut res = Vec::new();
     while {
-        if let Some(chunk) = body.next().await {
+        if let Some(chunk) = body.data().await {
             res.extend_from_slice(&*chunk?);
             true
         } else {
@@ -194,36 +194,42 @@ async fn handler(mut req: Request<Body>) -> Result<Response<Body>, Error> {
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct Metrics<'a> {
     version: u8,
-    data: Vec<Metric<'a>>,
+    data: Data<'a>,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct Data<'a> {
+    password: Metric<'a>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct Metric<'a> {
-    name: &'static str,
+    #[serde(rename = "type")]
+    value_type: &'static str,
     value: &'a str,
     description: Option<&'static str>,
     copyable: bool,
     qr: bool,
+    masked: bool,
 }
 
-#[tokio::main(core_threads = 4)]
+#[tokio::main(worker_threads = 4)]
 async fn main() {
     println!("USING PROXY: {:?}", &*PROXY);
     &*CONFIG;
-    let mut metrics = Vec::new();
-    metrics.push(Metric {
-        name: "Password",
-        value: &CONFIG.password,
-        description: Some("Password for authenticating to your Cups service. This password can be updated in the Cups config page."),
-        copyable: true,
-        qr: false,
-    });
+    let data = Data {
+        password: Metric {
+            value_type: "string",
+            value: &CONFIG.password,
+            description: Some("Password for authenticating to your Cups service. This password can be updated in the Cups config page."),
+            copyable: true,
+            qr: false,
+            masked: true,
+        }
+    };
     serde_yaml::to_writer(
         std::fs::File::create("/root/start9/.stats.yaml.tmp").unwrap(),
-        &Metrics {
-            version: 1,
-            data: metrics,
-        },
+        &Metrics { version: 2, data },
     )
     .unwrap();
     std::fs::rename("./start9/.stats.yaml.tmp", "./start9/stats.yaml").unwrap();
