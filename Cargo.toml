@@ -2,7 +2,7 @@
 authors = ["Aiden McClelland <me@drbonez.dev>"]
 edition = "2018"
 name = "cups"
-version = "0.3.7"
+version = "0.3.8"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
